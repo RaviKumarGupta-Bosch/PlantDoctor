@@ -1,0 +1,31 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.pdb
+
+# Node
+node_modules/
+dist/
+build/
+coverage/
+.env
+.env.local
+*.log
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# OS
+Thumbs.db
+.DS_Store
+
+# App output
+logs/
+artifacts/
+*.jsonl
