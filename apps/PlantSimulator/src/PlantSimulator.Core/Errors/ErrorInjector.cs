@@ -28,7 +28,7 @@ public sealed class ErrorInjector : IErrorInjector
         try
         {
             checked { int x = int.MaxValue; x++; }
-            return new ErrorEventDto();
+            return new ErrorEventDto(); // unreachable
         }
         catch (OverflowException ex)
         {

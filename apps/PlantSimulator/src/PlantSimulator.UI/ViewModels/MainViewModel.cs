@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PlantSimulator.Contracts;
@@ -6,6 +7,7 @@ using PlantSimulator.Core.Com;
 using PlantSimulator.Core.Errors;
 using PlantSimulator.Core.Logging;
 using PlantSimulator.Core.Sensors;
+using PlantSimulator.UI.Views;
 
 namespace PlantSimulator.UI.ViewModels;
 
@@ -56,6 +58,15 @@ public partial class MainViewModel : ObservableObject
         var s = _sensors.Sensors.First();
         _sensors.InjectOutOfRange(s.Name);
         Publish(_errors.OutOfRangeValue(s.Name, s.Max * 10, s.Unit));
+    }
+
+    [RelayCommand]
+    private void OpenSettings()
+    {
+        var window = Application.Current.MainWindow;
+        var dlg = new SettingsDialog();
+        dlg.Owner = window;
+        dlg.ShowDialog();
     }
 
     private void Publish(ErrorEventDto e)

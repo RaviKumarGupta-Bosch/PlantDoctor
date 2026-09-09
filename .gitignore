@@ -29,3 +29,22 @@ Thumbs.db
 logs/
 artifacts/
 *.jsonl
+
+# Documentation assets (screenshots, images)
+docs/screenshots/
+docs/images/
+!docs/screenshots/.gitkeep
+!docs/images/.gitkeep
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/

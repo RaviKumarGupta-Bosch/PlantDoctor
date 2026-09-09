@@ -66,7 +66,7 @@ public sealed class JsonlPlantLogger : IPlantLogger, IDisposable
         if (_writer is null || today != _openDate)
         {
             _writer?.Dispose();
-            _writer = new StreamWriter(new FileStream(CurrentLogFilePath, FileMode.Append, FileAccess.Write, FileShare.Read));
+            _writer = new StreamWriter(new FileStream(CurrentLogFilePath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite));
             _openDate = today;
         }
     }

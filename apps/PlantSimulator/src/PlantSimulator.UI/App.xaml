@@ -1,6 +1,10 @@
 <Application x:Class="PlantSimulator.UI.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             StartupUri="Views/MainWindow.xaml">
-    <Application.Resources />
+             xmlns:conv="clr-namespace:PlantSimulator.UI.Converters"
+             Startup="App_OnStartup"
+             Exit="App_OnExit">
+    <Application.Resources>
+        <conv:StatusToBrushConverter x:Key="StatusToBrushConverter"/>
+    </Application.Resources>
 </Application>

@@ -17,7 +17,6 @@ public static class ServiceHostBuilder
         builder.ConfigureServices(services =>
         {
             services.AddServiceModelServices();
-            services.AddServiceModelNetNamedPipe();
             services.AddSingleton<PlantMonitorService>();
             services.AddSingleton<IPlantMonitorService>(sp => sp.GetRequiredService<PlantMonitorService>());
         });
