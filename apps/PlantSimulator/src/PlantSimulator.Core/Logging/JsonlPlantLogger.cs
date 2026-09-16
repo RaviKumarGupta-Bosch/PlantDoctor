@@ -49,6 +49,14 @@ public sealed class JsonlPlantLogger : IPlantLogger, IDisposable
         message = $"COM {e.Port} {e.Status} {e.RawFrame}"
     });
 
+    public void Log(ScanEventDto e) => WriteLine(new
+    {
+        timestamp = e.TimestampUtc,
+        level = "Info",
+        source = "Scanner",
+        message = $"Scan {e.CodeType} '{e.Code}' on {e.Port}"
+    });
+
     private void WriteLine(object obj)
     {
         var json = JsonSerializer.Serialize(obj);

@@ -5,7 +5,9 @@ using Microsoft.Extensions.Hosting;
 using PlantSimulator.Core.Com;
 using PlantSimulator.Core.Errors;
 using PlantSimulator.Core.Logging;
+using PlantSimulator.Core.Scanner;
 using PlantSimulator.Core.Sensors;
+using PlantSimulator.Core.Transports;
 using PlantSimulator.ServiceHost;
 using PlantSimulator.UI.ViewModels;
 using PlantSimulator.UI.Views;
@@ -70,6 +72,11 @@ public partial class App : Application
                 services.AddSingleton<ISensorSimulationService, SensorSimulationService>();
                 services.AddSingleton<IComPortSimulator, ComPortSimulator>();
                 services.AddSingleton<IErrorInjector, ErrorInjector>();
+                services.AddSingleton<IScannerSimulator, ScannerSimulator>();
+                services.AddSingleton<ICommunicationHub, CommunicationHub>();
+                services.AddSingleton<NamedPipeSensorClient>();
+                services.AddSingleton<TcpSensorClient>();
+                services.AddSingleton<BluetoothSimSensorClient>();
                 services.AddSingleton<MainViewModel>();
             })
             .AddPlantMonitorHost()

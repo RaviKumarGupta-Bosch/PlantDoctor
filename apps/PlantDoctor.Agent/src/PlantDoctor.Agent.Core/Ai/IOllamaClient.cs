@@ -3,7 +3,7 @@ namespace PlantDoctor.Agent.Core.Ai;
 public sealed class OllamaOptions
 {
     public string BaseUrl { get; set; } = "http://localhost:11434";
-    public string Model { get; set; } = "llama3.1:8b";
+    public string Model { get; set; } = "mistral:latest";
 }
 
 public interface IOllamaClient

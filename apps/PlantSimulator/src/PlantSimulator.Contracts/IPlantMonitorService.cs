@@ -15,6 +15,9 @@ public interface IPlantMonitorService
     [OperationContract(IsOneWay = true)]
     void ReportComEvent(ComEventDto dto);
 
+    [OperationContract(IsOneWay = true)]
+    void ReportScanEvent(ScanEventDto dto);
+
     [OperationContract]
     PlantSnapshotDto GetCurrentSnapshot();
 }
@@ -52,9 +55,19 @@ public class ComEventDto
 }
 
 [DataContract]
+public class ScanEventDto
+{
+    [DataMember] public DateTime TimestampUtc { get; set; }
+    [DataMember] public string Port { get; set; } = string.Empty;
+    [DataMember] public string Code { get; set; } = string.Empty;
+    [DataMember] public string CodeType { get; set; } = "Barcode";
+}
+
+[DataContract]
 public class PlantSnapshotDto
 {
     [DataMember] public DateTime TakenAtUtc { get; set; }
     [DataMember] public List<SensorReadingDto> Sensors { get; set; } = new();
     [DataMember] public ComEventDto? Com { get; set; }
+    [DataMember] public ScanEventDto? LastScan { get; set; }
 }

@@ -1,6 +1,12 @@
 <Application x:Class="PlantDoctor.Agent.UI.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:converters="clr-namespace:PlantDoctor.Agent.UI.Converters"
              StartupUri="Views/MainWindow.xaml">
-    <Application.Resources />
+    <Application.Resources>
+        <converters:LevelToBrushConverter x:Key="LevelToBrushConverter"/>
+        <converters:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
+        <converters:RoleToBrushConverter x:Key="RoleToBrushConverter"/>
+        <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+    </Application.Resources>
 </Application>
