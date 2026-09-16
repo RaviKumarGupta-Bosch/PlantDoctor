@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <ItemGroup>
+        <PackageReference Include="System.ServiceModel.Primitives" Version="8.0.0" />
+        <PackageReference Include="System.ServiceModel.NetNamedPipe" Version="8.0.0" />
+    </ItemGroup>
+</Project>

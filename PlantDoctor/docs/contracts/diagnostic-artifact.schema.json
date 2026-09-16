@@ -1,0 +1,95 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://plantdoctor.local/schemas/diagnostic-artifact.json",
+  "title": "DiagnosticArtifact",
+  "description": "Portable diagnostic artifact produced by PlantDoctor.Agent and consumed by PlantDoctor.Portal.",
+  "type": "object",
+  "required": [
+    "artifactId",
+    "generatedAtUtc",
+    "plantId",
+    "incident",
+    "recentLogEntries",
+    "sensorSnapshot",
+    "comConnectionState",
+    "aiAnalysis",
+    "operatorChatTranscript"
+  ],
+  "properties": {
+    "artifactId": { "type": "string", "format": "uuid" },
+    "generatedAtUtc": { "type": "string", "format": "date-time" },
+    "plantId": { "type": "string" },
+    "incident": {
+      "type": "object",
+      "required": ["detectedAtUtc", "severity", "source", "primaryMessage"],
+      "properties": {
+        "detectedAtUtc": { "type": "string", "format": "date-time" },
+        "severity": { "enum": ["Warning", "Error", "Critical"] },
+        "source": { "enum": ["Sensor", "COM", "Application"] },
+        "errorCode": { "type": ["string", "null"] },
+        "primaryMessage": { "type": "string" }
+      }
+    },
+    "recentLogEntries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["timestamp", "level", "source", "message"],
+        "properties": {
+          "timestamp": { "type": "string", "format": "date-time" },
+          "level": { "type": "string" },
+          "source": { "type": "string" },
+          "sensorName": { "type": "string" },
+          "value": { "type": "string" },
+          "errorCode": { "type": "string" },
+          "message": { "type": "string" },
+          "stackTrace": { "type": "string" }
+        }
+      }
+    },
+    "sensorSnapshot": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "value", "unit", "status"],
+        "properties": {
+          "name": { "type": "string" },
+          "value": { "type": "number" },
+          "unit": { "type": "string" },
+          "status": { "type": "string" }
+        }
+      }
+    },
+    "comConnectionState": {
+      "type": "object",
+      "required": ["port", "status", "lastEventUtc"],
+      "properties": {
+        "port": { "type": "string" },
+        "status": { "type": "string" },
+        "lastEventUtc": { "type": "string", "format": "date-time" }
+      }
+    },
+    "aiAnalysis": {
+      "type": "object",
+      "required": ["modelUsed", "summary", "suspectedRootCause", "confidence"],
+      "properties": {
+        "modelUsed": { "type": "string" },
+        "summary": { "type": "string" },
+        "suspectedRootCause": { "type": "string" },
+        "confidence": { "enum": ["Low", "Medium", "High"] }
+      }
+    },
+    "operatorChatTranscript": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["role", "message", "timestampUtc"],
+        "properties": {
+          "role": { "enum": ["operator", "assistant"] },
+          "message": { "type": "string" },
+          "timestampUtc": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

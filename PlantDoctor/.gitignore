@@ -1,0 +1,53 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.pdb
+
+# Node
+node_modules/
+dist/
+build/
+coverage/
+.env
+.env.local
+*.log
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# OS
+Thumbs.db
+.DS_Store
+
+# App output
+logs/
+artifacts/
+*.jsonl
+
+# Documentation assets (screenshots, images)
+docs/screenshots/
+docs/images/
+!docs/screenshots/.gitkeep
+!docs/images/.gitkeep
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+
+apps/PlantSimulator/output/

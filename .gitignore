@@ -1,0 +1,36 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.log
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+
+# IDE
+.vscode/
+.idea/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+output/
+*.dll
+*.exe
+*.pdb
+*.xml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
