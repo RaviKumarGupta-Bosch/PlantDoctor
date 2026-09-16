@@ -1,0 +1,15 @@
+{
+  "name": "plantdoctor-portal",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "client",
+    "server",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "npm --workspace server run dev & npm --workspace client run dev",
+    "build": "npm --workspace shared run build && npm --workspace server run build && npm --workspace client run build",
+    "test": "npm --workspaces --if-present run test"
+  }
+}

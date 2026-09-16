@@ -20,6 +20,9 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+dist/
+build/
+coverage/
 
 # Build outputs
 output/
@@ -28,9 +31,34 @@ output/
 *.pdb
 *.xml
 
+# Environment
+.env
+.env.local
+
 # OS
 .DS_Store
 Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
 
-# Logs
-*.log
+# App output
+logs/
+artifacts/
+*.jsonl
+
+# Documentation assets (screenshots, images)
+docs/screenshots/
+docs/images/
+!docs/screenshots/.gitkeep
+!docs/images/.gitkeep
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Windows
+apps/PlantSimulator/output/
