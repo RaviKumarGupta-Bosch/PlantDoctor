@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions"
+            Version="8.0.0" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference
+            Include="..\..\..\Shared\PlantDoctor.Contracts\PlantDoctor.Contracts.csproj" />
+    </ItemGroup>
+</Project>

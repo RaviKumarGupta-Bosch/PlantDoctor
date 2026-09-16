@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- Lives outside both app folders so DeviceSimulator.sln and PlantMonitor.sln can each
+         reference it without inheriting the other app's Directory.Build.props. -->
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="System.ServiceModel.Primitives" Version="8.0.0" />
+        <PackageReference Include="System.ServiceModel.NetNamedPipe" Version="8.0.0" />
+    </ItemGroup>
+</Project>
