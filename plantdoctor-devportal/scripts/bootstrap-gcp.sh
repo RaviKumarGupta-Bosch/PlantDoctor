@@ -15,8 +15,8 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # Configuration — edit these before running, or export as env vars.
 # ---------------------------------------------------------------------------
-PROJECT_ID="${PROJECT_ID:-plantdoctor-codingaura}"
-PROJECT_NUMBER="${PROJECT_NUMBER:-655336664371}"
+PROJECT_ID="${PROJECT_ID:-plantdoctor-teamcodingaura}"
+PROJECT_NUMBER="${PROJECT_NUMBER:-305630320430}"
 REGION="${REGION:-us-central1}"
 AR_REPO="${AR_REPO:-adk-agents}"
 

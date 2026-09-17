@@ -9,9 +9,9 @@
 # WIF exchanges the GitHub Actions OIDC token for short-lived GCP credentials.
 #
 # Target GCP project (set via repo vars, see README "Deploying to Cloud Run"):
-#   Project name:   PlantDoctor-CodingAura
-#   Project number: 655336664371
-#   Project ID:     plantdoctor-codingaura
+#   Project name:   PlantDoctor-TeamCodingAura
+#   Project number: 305630320430
+#   Project ID:     plantdoctor-teamcodingaura
 
 name: Deploy plantdoctor-devportal to Cloud Run
 
