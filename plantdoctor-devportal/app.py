@@ -16,6 +16,9 @@ except Exception:  # pragma: no cover
 
 SYSTEM_PROMPT_PATH = Path(__file__).resolve().parent / "system_prompt" / "default_prompt.txt"
 
+# Gemini Model Configuration
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-pro")  # Advanced model by default
+
 
 def load_system_prompt() -> str:
     if SYSTEM_PROMPT_PATH.exists():
@@ -125,6 +128,77 @@ def extract_summary_from_analysis(analysis_text: str) -> dict:
     return summary
 
 
+def structure_analysis_output(analysis_text: str) -> dict:
+    """Parse analysis into structured sections for better readability."""
+    structured = {
+        "reproducing_steps": [],
+        "possible_causes": [],
+        "fix_tips": [],
+        "resilience_tips": [],
+        "summary": analysis_text,
+    }
+    
+    lines = analysis_text.split('\n')
+    current_section = None
+    
+    for line in lines:
+        lower_line = line.lower().strip()
+        
+        # Identify sections
+        if 'reproduc' in lower_line and 'step' in lower_line:
+            current_section = "reproducing_steps"
+        elif 'cause' in lower_line and ('possib' in lower_line or 'root' in lower_line):
+            current_section = "possible_causes"
+        elif ('fix' in lower_line or 'solution' in lower_line or 'resolv' in lower_line) and 'tip' in lower_line:
+            current_section = "fix_tips"
+        elif ('avoid' in lower_line or 'prevent' in lower_line or 'resilience' in lower_line):
+            current_section = "resilience_tips"
+        elif line.strip() and current_section and not line.startswith('#'):
+            # Add numbered/bulleted items
+            if line.strip().startswith(('-', '*', '•')) or any(c.isdigit() for c in line.split('.')[0]):
+                content = line.strip().lstrip('-*•').strip()
+                if content and current_section in structured:
+                    structured[current_section].append(content)
+    
+    return structured
+
+
+def format_structured_analysis(structured: dict) -> None:
+    """Display structured analysis in organized sections."""
+    
+    # Reproducing Steps
+    st.markdown("### 🔄 Reproducing Steps")
+    if structured["reproducing_steps"]:
+        for i, step in enumerate(structured["reproducing_steps"], 1):
+            st.write(f"{i}. {step}")
+    else:
+        st.info("Steps to reproduce the issue would appear here")
+    
+    # Possible Causes
+    st.markdown("### 🔍 Possible Causes")
+    if structured["possible_causes"]:
+        for cause in structured["possible_causes"]:
+            st.write(f"• {cause}")
+    else:
+        st.info("Analysis of root causes would appear here")
+    
+    # Fix Tips
+    st.markdown("### 🛠️ How to Fix")
+    if structured["fix_tips"]:
+        for i, tip in enumerate(structured["fix_tips"], 1):
+            st.write(f"{i}. {tip}")
+    else:
+        st.info("Recommended fixes and solutions would appear here")
+    
+    # Resilience & Prevention
+    st.markdown("### 🛡️ How to Avoid (Build Resilience)")
+    if structured["resilience_tips"]:
+        for i, tip in enumerate(structured["resilience_tips"], 1):
+            st.write(f"{i}. {tip}")
+    else:
+        st.info("Recommendations to prevent this issue in the future would appear here")
+
+
 def send_to_sap_btp(plant_doc_data: dict) -> tuple[bool, str]:
     """Send issue to SAP BTP OData V4 service."""
     
@@ -187,6 +261,11 @@ st.set_page_config(page_title="PlantDoctor DevPortal", page_icon="🌿", layout=
 st.title("🌿 PlantDoctor DevPortal")
 st.caption("Diagnose plant issues with AI analysis and route actions to SAP BTP workflows.")
 
+# Display active Gemini model
+col1, col2, col3 = st.columns([3, 1, 1])
+with col3:
+    st.caption(f"🤖 Model: `{GEMINI_MODEL}`")
+
 prompt = load_system_prompt()
 
 # Create tabs for different input methods
@@ -214,7 +293,7 @@ with tab1:
             with st.spinner("Analyzing plant health..."):
                 client = build_client()
                 response = client.models.generate_content(
-                    model="gemini-2.0-flash",
+                    model=GEMINI_MODEL,
                     contents=user_message,
                     config=types.GenerateContentConfig(system_instruction=prompt),
                 )
@@ -226,8 +305,16 @@ with tab1:
                 "For Cloud Run, the deployment workflow injects those values automatically."
             )
 
-        st.markdown("### 📋 Recommendation")
-        st.write(answer)
+        st.markdown("---")
+        st.markdown("## 🔍 Analysis Results")
+        
+        # Structure the analysis for better readability
+        structured = structure_analysis_output(answer)
+        format_structured_analysis(structured)
+        
+        # Show full analysis in expander
+        with st.expander("📖 Full Analysis Report"):
+            st.markdown(answer)
 
     else:
         st.info(
@@ -303,7 +390,7 @@ with tab2:
                     
                     client = build_client()
                     response = client.models.generate_content(
-                        model="gemini-2.0-flash",
+                        model=GEMINI_MODEL,
                         contents=analysis_content,
                         config=types.GenerateContentConfig(system_instruction=prompt),
                     )
@@ -313,13 +400,17 @@ with tab2:
                 st.markdown("---")
                 st.markdown("## 🔍 Analysis Results")
                 
-                # Parse results into sections
-                st.markdown("### Issue Analysis & Resolution")
-                st.markdown(analysis_result)
+                # Structure the analysis for better readability
+                structured = structure_analysis_output(analysis_result)
+                format_structured_analysis(structured)
+                
+                # Show full analysis in expander
+                with st.expander("📖 Full Analysis Report"):
+                    st.markdown(analysis_result)
                 
                 # Extract and display summary
                 st.markdown("---")
-                st.markdown("### 📋 Analysis Summary")
+                st.markdown("### 📋 Analysis Summary for SAP BTP")
                 
                 summary = extract_summary_from_analysis(analysis_result)
                 

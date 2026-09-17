@@ -97,7 +97,7 @@ jobs:
             --port=8080 \
             --timeout=300 \
             --memory=1Gi \
-            --set-env-vars="VERTEX_PROJECT_ID=${PROJECT_ID},VERTEX_LOCATION=${REGION},GOOGLE_GENAI_USE_VERTEXAI=true,SAP_BTP_MOCK_MODE=${{ vars.SAP_BTP_MOCK_MODE }}" \
+            --set-env-vars="VERTEX_PROJECT_ID=${PROJECT_ID},VERTEX_LOCATION=${REGION},GOOGLE_GENAI_USE_VERTEXAI=true,GEMINI_MODEL=gemini-2.0-pro,SAP_BTP_MOCK_MODE=${{ vars.SAP_BTP_MOCK_MODE }}" \
             --set-secrets="SAP_BTP_CLIENT_SECRET=SAP_BTP_CLIENT_SECRET:latest"
 
       - name: Grant Cloud Run invoker access
