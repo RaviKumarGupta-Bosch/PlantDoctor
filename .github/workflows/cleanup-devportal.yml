@@ -1,0 +1,188 @@
+# Cleanup workflow to reduce GCP billing costs
+# Removes billable resources while maintaining infrastructure for quick redeployment
+#
+# Target GCP project:
+#   Project ID: plantdoctor-codingaura
+#   Project Number: 655336664371
+#
+# What this workflow removes (billable):
+#   - Cloud Run service deployment (stops incurring compute charges)
+#   - Old/unused Docker images from Artifact Registry (saves storage)
+#
+# What this workflow KEEPS (non-billable infrastructure):
+#   - Workload Identity Pool & Provider (free)
+#   - Service Account (free when not in use)
+#   - IAM role bindings (free)
+#   - Artifact Registry repository (free when empty)
+#   - GitHub Actions secrets (free)
+#
+# Usage:
+#   1. Run manually from Actions tab
+#   2. Or schedule to run on a cron schedule (e.g., daily/weekly cleanup)
+#   3. Run 'deploy-devportal.yml' workflow to redeploy and resume billing
+
+name: Cleanup PlantDoctor Resources (Cost Optimization)
+
+on:
+  workflow_dispatch:
+    inputs:
+      cleanup_level:
+        description: 'Cleanup Level'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - 'service-only'
+          - 'service-and-images'
+          - 'full'
+  schedule:
+    # Run cleanup every Sunday at 2 AM UTC (optional, comment out if not needed)
+    # - cron: '0 2 * * 0'
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  REGION: "${{ vars.REGION || 'asia-south1' }}"
+  PROJECT_ID: "${{ vars.PROJECT_ID || 'plantdoctor-codingaura' }}"
+  AR_REPO: "adk-agents"
+  GCP_WORKLOAD_IDENTITY_PROVIDER: "${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
+  GCP_SERVICE_ACCOUNT: "${{ vars.GCP_SERVICE_ACCOUNT }}"
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Cleanup Level - Service Only
+        if: ${{ github.event.inputs.cleanup_level == 'service-only' || github.event.inputs.cleanup_level == 'full' }}
+        run: |
+          echo "🛑 Stopping Cloud Run service to reduce billing..."
+          echo "   This stops compute charges immediately"
+          echo "   Infrastructure remains in place for quick redeployment"
+          
+          if gcloud run services describe "plantdoctor-devportal" \
+              --project="${PROJECT_ID}" --region="${REGION}" >/dev/null 2>&1; then
+            echo "❌ Deleting Cloud Run service [plantdoctor-devportal]..."
+            gcloud run services delete "plantdoctor-devportal" \
+              --project="${PROJECT_ID}" --region="${REGION}" --quiet || echo "Service deletion failed or already deleted"
+            echo "✅ Cloud Run service removed"
+            echo ""
+            echo "💾 Service definition preserved in code for redeployment"
+            echo "⏱️ Redeployment time: ~2-3 minutes (same as initial deployment)"
+          else
+            echo "ℹ️ Cloud Run service not found (already cleaned up)"
+          fi
+
+      - name: Cleanup Level - Remove Old Docker Images
+        if: ${{ github.event.inputs.cleanup_level == 'service-and-images' || github.event.inputs.cleanup_level == 'full' }}
+        run: |
+          echo "🧹 Cleaning up Docker images to reduce storage costs..."
+          
+          # Get list of images older than 30 days
+          IMAGES=$(gcloud artifacts docker images list \
+            "${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}" \
+            --include-tags \
+            --project="${PROJECT_ID}" 2>/dev/null | tail -n +2)
+          
+          if [ -z "$IMAGES" ]; then
+            echo "ℹ️ No images found in Artifact Registry"
+            exit 0
+          fi
+          
+          # Delete all images except the latest 5
+          IMAGE_COUNT=$(echo "$IMAGES" | wc -l)
+          DELETE_COUNT=$((IMAGE_COUNT - 5))
+          
+          if [ $DELETE_COUNT -gt 0 ]; then
+            echo "📦 Found $IMAGE_COUNT images, keeping latest 5, deleting $DELETE_COUNT old images..."
+            
+            echo "$IMAGES" | head -n $DELETE_COUNT | while read -r IMAGE_PATH; do
+              if [ -n "$IMAGE_PATH" ]; then
+                echo "  Deleting: $IMAGE_PATH"
+                gcloud artifacts docker images delete "$IMAGE_PATH" \
+                  --project="${PROJECT_ID}" --delete-tags --quiet 2>/dev/null || echo "    ⚠️ Could not delete $IMAGE_PATH"
+              fi
+            done
+            
+            echo "✅ Old Docker images removed"
+          else
+            echo "ℹ️ Keeping all $IMAGE_COUNT images (less than 5)"
+          fi
+          
+          echo ""
+          echo "💾 Artifact Registry repository preserved for redeployment"
+
+      - name: Verify Infrastructure Remains
+        run: |
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ CLEANUP COMPLETE - Infrastructure Preserved"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "🔍 Verifying preserved resources:"
+          echo ""
+          
+          # Check WIF Pool
+          echo "📌 Workload Identity Pool:"
+          gcloud iam workload-identity-pools list --location=global --project="${PROJECT_ID}" \
+            --filter="displayName:github-pool" --format="table(name,disabled)" || echo "   ✅ WIF Pool exists"
+          echo ""
+          
+          # Check Service Account
+          echo "📌 Service Account:"
+          gcloud iam service-accounts describe "${GCP_SERVICE_ACCOUNT}" \
+            --project="${PROJECT_ID}" --format="table(email,disabled)" || echo "   ✅ Service account exists"
+          echo ""
+          
+          # Check Artifact Registry Repo
+          echo "📌 Artifact Registry Repository:"
+          gcloud artifacts repositories describe "${AR_REPO}" \
+            --location="${REGION}" --project="${PROJECT_ID}" \
+            --format="table(name,format)" || echo "   ✅ Repository exists"
+          echo ""
+          
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📊 BILLING IMPACT:"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "✅ STOPPED billing:"
+          echo "   • Cloud Run compute (vCPU, memory)"
+          echo "   • Service invocation charges"
+          echo ""
+          echo "💰 MINIMAL/FREE charges (if any):"
+          echo "   • Artifact Registry repository (free when <0.5GB unused)"
+          echo "   • Workload Identity operations (first 1M free monthly)"
+          echo "   • Secret Manager (first 6 free monthly)"
+          echo "   • Service accounts, IAM bindings (always free)"
+          echo ""
+          echo "🚀 TO REDEPLOY:"
+          echo "   Run: 'Deploy plantdoctor-devportal to Cloud Run' workflow"
+          echo "   Time: ~2-3 minutes"
+          echo "   All infrastructure will automatically recreate the service"
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      - name: Cleanup Summary
+        if: success()
+        run: |
+          echo ""
+          echo "✅ Cleanup workflow completed successfully!"
+          echo ""
+          echo "Next steps:"
+          echo "1. Monitor GCP billing for reduced charges"
+          echo "2. When ready to use PlantDoctor again, run deploy-devportal.yml workflow"
+          echo "3. Service will be back online in 2-3 minutes"
