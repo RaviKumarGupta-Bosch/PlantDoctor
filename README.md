@@ -43,30 +43,30 @@ See each app's `README.md` for run instructions.
 
 | Field          | Value                    |
 | -------------- | ------------------------ |
-| Project name   | `PlantDoctor-CodingAura` |
-| Project number | `655336664371`           |
-| Project ID     | `plantdoctor-codingaura` |
+| Project name   | `PlantDoctor-TeamCodingAura` |
+| Project number | `305630320430`               |
+| Project ID     | `plantdoctor-teamcodingaura` |
 
 This is a standalone project (separate from wherever the existing RAG-agent deployment runs), so it needs its own Workload Identity Pool, OIDC provider, service account, and Artifact Registry repo — see [Bootstrapping WIF for a new project](#bootstrapping-wif-for-a-new-project) below. Once bootstrapped, set these as GitHub Actions **repository variables** (Settings → Secrets and variables → Actions → Variables) so the workflow picks them up via `vars.*`:
 
 | Variable                          | Value                                                                                     |
 | ---------------------------------- | ------------------------------------------------------------------------------------------ |
-| `PROJECT_ID`                       | `plantdoctor-codingaura`                                                                   |
+| `PROJECT_ID`                       | `plantdoctor-teamcodingaura`                                                               |
 | `REGION`                           | e.g. `us-central1` (whichever region you bootstrap into)                                   |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER`   | printed by `bootstrap-gcp.sh`: `projects/655336664371/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider` |
-| `GCP_SERVICE_ACCOUNT`              | printed by `bootstrap-gcp.sh`: `plantdoctor-devportal-deployer@plantdoctor-codingaura.iam.gserviceaccount.com` |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER`   | printed by `bootstrap-gcp.sh`: `projects/305630320430/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider` |
+| `GCP_SERVICE_ACCOUNT`              | printed by `bootstrap-gcp.sh`: `plantdoctor-devportal-deployer@plantdoctor-teamcodingaura.iam.gserviceaccount.com` |
 | `DEVPORTAL_ALLOWED_INVOKERS`       | comma-separated list of `user:`/`group:` members to grant `roles/run.invoker` (optional)   |
 | `SAP_BTP_MOCK_MODE`                | `true`/`false` toggle passed through as a plain env var                                    |
 
 ### Bootstrapping WIF for a new project
 
-`plantdoctor-codingaura` is a **new** GCP project, so it needs its own Workload Identity Pool, OIDC provider, and service account before the workflow can authenticate. This repository's Actions run on GitHub Enterprise Server (`github.boschdevcloud.com`), not public github.com, so the WIF provider must trust that instance's own OIDC token issuer rather than `token.actions.githubusercontent.com`.
+`plantdoctor-teamcodingaura` is a **new** GCP project, so it needs its own Workload Identity Pool, OIDC provider, and service account before the workflow can authenticate. This repository's Actions run on GitHub Enterprise Server (`github.boschdevcloud.com`), not public github.com, so the WIF provider must trust that instance's own OIDC token issuer rather than `token.actions.githubusercontent.com`.
 
 Run the bootstrap script once, from a machine authenticated with an account that can manage IAM/services on the target project:
 
 ```bash
-PROJECT_ID=plantdoctor-codingaura \
-PROJECT_NUMBER=655336664371 \
+PROJECT_ID=plantdoctor-teamcodingaura \
+PROJECT_NUMBER=305630320430 \
 REGION=us-central1 \
 GH_HOST=github.boschdevcloud.com \
 GH_REPO=PLT3KOR/PlantDoctor \
@@ -76,7 +76,7 @@ GH_REPO=PLT3KOR/PlantDoctor \
 This creates, idempotently:
 
 - A dedicated Workload Identity Pool + OIDC provider scoped to this exact repo (`GH_REPO`), so no other repo on the GHES instance can impersonate the resulting service account
-- A single service account (`plantdoctor-devportal-deployer@plantdoctor-codingaura.iam.gserviceaccount.com`) used both by CI to deploy and by Cloud Run at runtime, with `roles/run.admin`, `roles/artifactregistry.writer`, `roles/iam.serviceAccountUser`, `roles/aiplatform.user`, and `roles/secretmanager.admin`
+- A single service account (`plantdoctor-devportal-deployer@plantdoctor-teamcodingaura.iam.gserviceaccount.com`) used both by CI to deploy and by Cloud Run at runtime, with `roles/run.admin`, `roles/artifactregistry.writer`, `roles/iam.serviceAccountUser`, `roles/aiplatform.user`, and `roles/secretmanager.admin`
 - The shared `adk-agents` Artifact Registry repo in the chosen region
 
 At the end it prints the exact values to paste into the repo's GitHub Actions **variables** (`PROJECT_ID`, `REGION`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT`). **No GitHub secret is required for GCP authentication** — that's the point of WIF over static service-account keys. The only credential-like value the app needs (`SAP_BTP_CLIENT_SECRET`) lives in GCP Secret Manager instead, as described below.
@@ -122,5 +122,4 @@ gcloud secrets versions add "SAP_BTP_CLIENT_SECRET" \
 ```
 
 Then paste the real secret value into the prompt or use an approved secure pipeline step. `SAP_BTP_MOCK_MODE` remains a plain environment flag and is deliberately kept in the workflow because it is a safe toggle, not a secret.
-
 
