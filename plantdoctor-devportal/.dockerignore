@@ -1,0 +1,13 @@
+.env
+__pycache__/
+.git/
+.gitignore
+issue_history.json
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+.env.*

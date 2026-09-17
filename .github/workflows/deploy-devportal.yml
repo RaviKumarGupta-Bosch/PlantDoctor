@@ -1,0 +1,141 @@
+# This workflow authenticates via the SAME Workload Identity Federation
+# pattern/conventions as the reference deploy.yml (google-github-actions/auth,
+# vars.GCP_WORKLOAD_IDENTITY_PROVIDER / vars.GCP_SERVICE_ACCOUNT). Unlike the
+# reference, plantdoctor-devportal runs in its OWN dedicated GCP project, so
+# it required a one-time bootstrap (WIF pool/provider/service account) rather
+# than reusing an existing identity — see
+# plantdoctor-devportal/scripts/bootstrap-gcp.sh and the README
+# "Deploying to Cloud Run" section. No GitHub secret is used for GCP auth;
+# WIF exchanges the GitHub Actions OIDC token for short-lived GCP credentials.
+#
+# Target GCP project (set via repo vars, see README "Deploying to Cloud Run"):
+#   Project name:   PlantDoctor-CodingAura
+#   Project number: 655336664371
+#   Project ID:     plantdoctor-codingaura
+
+name: Deploy plantdoctor-devportal to Cloud Run
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "plantdoctor-devportal/**"
+      - ".github/workflows/deploy-devportal.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  REGION: "${{ vars.REGION }}"
+  PROJECT_ID: "${{ vars.PROJECT_ID }}"
+  AR_REPO: "adk-agents"
+  GCP_WORKLOAD_IDENTITY_PROVIDER: "${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
+  GCP_SERVICE_ACCOUNT: "${{ vars.GCP_SERVICE_ACCOUNT }}"
+  DEVPORTAL_ALLOWED_INVOKERS: "${{ vars.DEVPORTAL_ALLOWED_INVOKERS }}"
+
+jobs:
+  deploy-devportal:
+    needs: []
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          echo "🔧 Configuring Docker for Artifact Registry..."
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Ensure the shared service account can use Vertex AI and Secret Manager
+        run: |
+          echo "🔐 Ensuring the shared service account has the required GCP roles..."
+          gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+            --member="serviceAccount:${GCP_SERVICE_ACCOUNT}" \
+            --role="roles/aiplatform.user" \
+            --condition=None 2>/dev/null || echo "Vertex AI access already configured"
+          # secretmanager.admin (not just secretAccessor) is required because this
+          # same service account both creates/updates SAP_BTP_CLIENT_SECRET below
+          # during CI and reads it at Cloud Run runtime; secretAccessor alone
+          # cannot create secrets or add versions.
+          gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+            --member="serviceAccount:${GCP_SERVICE_ACCOUNT}" \
+            --role="roles/secretmanager.admin" \
+            --condition=None 2>/dev/null || echo "Secret Manager access already configured"
+
+      - name: Ensure SAP_BTP_CLIENT_SECRET exists in Secret Manager
+        run: |
+          echo "🔐 Checking for SAP_BTP_CLIENT_SECRET..."
+          if ! gcloud secrets describe "SAP_BTP_CLIENT_SECRET" --project="${PROJECT_ID}" >/dev/null 2>&1; then
+            echo "⚠️ Secret SAP_BTP_CLIENT_SECRET does not exist yet. Creating a placeholder value; update it manually with: gcloud secrets versions add SAP_BTP_CLIENT_SECRET --data-file=-"
+            gcloud secrets create "SAP_BTP_CLIENT_SECRET" --project="${PROJECT_ID}" --replication-policy="automatic" >/dev/null 2>&1 || echo "Secret creation already handled"
+            printf '%s' 'PLACEHOLDER_UPDATE_ME' | gcloud secrets versions add "SAP_BTP_CLIENT_SECRET" --project="${PROJECT_ID}" --data-file=- >/dev/null 2>&1 || echo "Placeholder version already exists or the secret is not ready"
+          else
+            echo "SAP_BTP_CLIENT_SECRET already exists, skipping create."
+          fi
+
+      - name: Build and push image
+        id: build
+        run: |
+          echo "🏗️ Building plantdoctor-devportal image..."
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/plantdoctor-devportal:${{ github.sha }}"
+          echo "IMAGE=${IMAGE}" >> "$GITHUB_ENV"
+          docker build -t "$IMAGE" plantdoctor-devportal/
+          docker push "$IMAGE"
+
+      - name: Deploy to Cloud Run
+        run: |
+          echo "🚀 Deploying plantdoctor-devportal to Cloud Run..."
+          gcloud run deploy plantdoctor-devportal \
+            --project="${PROJECT_ID}" --region="${REGION}" \
+            --image="${IMAGE}" \
+            --service-account="${GCP_SERVICE_ACCOUNT}" \
+            --no-allow-unauthenticated \
+            --port=8080 \
+            --timeout=300 \
+            --memory=1Gi \
+            --set-env-vars="VERTEX_PROJECT_ID=${PROJECT_ID},VERTEX_LOCATION=${REGION},GOOGLE_GENAI_USE_VERTEXAI=true,SAP_BTP_MOCK_MODE=${{ vars.SAP_BTP_MOCK_MODE }}" \
+            --set-secrets="SAP_BTP_CLIENT_SECRET=SAP_BTP_CLIENT_SECRET:latest"
+
+      - name: Grant Cloud Run invoker access
+        if: ${{ env.DEVPORTAL_ALLOWED_INVOKERS != '' }}
+        run: |
+          echo "🔐 Granting Cloud Run invoker access..."
+          IFS=',' read -r -a INVOKERS <<< "${DEVPORTAL_ALLOWED_INVOKERS}"
+          for INVOKER in "${INVOKERS[@]}"; do
+            INVOKER="${INVOKER//[[:space:]]/}"
+            [ -n "${INVOKER}" ] || continue
+            echo "Granting roles/run.invoker to ${INVOKER}"
+            gcloud run services add-iam-policy-binding "plantdoctor-devportal" \
+              --project="${PROJECT_ID}" --region="${REGION}" \
+              --member="${INVOKER}" --role="roles/run.invoker" 2>/dev/null || echo "already exists for ${INVOKER}"
+          done
+
+      - name: Pin PUBLIC_URL back into the service
+        run: |
+          echo "🌐 Updating PUBLIC_URL for the deployed service..."
+          SERVICE_URL="$(gcloud run services describe "plantdoctor-devportal" --project="${PROJECT_ID}" --region="${REGION}" --format='value(status.url)')"
+          gcloud run services update "plantdoctor-devportal" \
+            --project="${PROJECT_ID}" --region="${REGION}" \
+            --set-env-vars="PUBLIC_URL=${SERVICE_URL}"
+
+      - name: Deployment Summary
+        run: |
+          SERVICE_URL="$(gcloud run services describe "plantdoctor-devportal" --project="${PROJECT_ID}" --region="${REGION}" --format='value(status.url)')"
+          echo "🎉 Deployment Summary"
+          echo "- Service: plantdoctor-devportal"
+          echo "- URL: ${SERVICE_URL}"
+          echo "- SAP_BTP_MOCK_MODE=${{ vars.SAP_BTP_MOCK_MODE }}"
+          echo "- IAM invoker access is required to open the URL if the service is not public."
