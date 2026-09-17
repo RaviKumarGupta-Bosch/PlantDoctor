@@ -26,10 +26,10 @@ https://t4x.wdisp.bosch.com/sap/opu/odata4/sap/ZUI_BTP_PLANTDOC_O4/srvd/sap/ZUI_
 ```
 
 ### Main Entity: PlantDoc
-- **Create Issue**: POST `/PlantDoc`
+- **Create Issue**: POST `/PlantDoc` (returns auto-generated IssueId)
 - **Read All Issues**: GET `/PlantDoc`
 - **Read Single Issue**: GET `/PlantDoc(IssueId='<id>')`
-- **Update Issue**: PATCH `/PlantDoc(IssueId='<id>')`
+- **Update Issue**: PATCH `/PlantDoc(IssueId='<id>')` (requires IssueId in URL, not in body)
 
 ### Required Fields
 
@@ -60,12 +60,29 @@ The system extracts and displays:
 - **Status**: OPEN, IN_PROGRESS, or COMPLETED
 - **Plant ID**: Target plant/asset identifier
 
-### Step 3: Submit to SAP BTP
-1. Review and adjust the analysis summary if needed
-2. Optionally change the Plant ID
-3. Click **"📤 Send to SAP BTP"**
-4. System will create an issue record in SAP BTP
-5. Success response includes the generated `IssueId`
+### Step 3: Submit to SAP BTP (Create or Update)
+
+#### Option A: Create New Issue
+1. Leave the **Issue ID** field empty
+2. Review and adjust the analysis summary if needed
+3. Optionally change the Plant ID
+4. Click **"📤 Send to SAP BTP"**
+5. System will create a new issue record in SAP BTP
+6. Success response includes the generated `IssueId`
+7. **Save the IssueId for future reference**
+
+#### Option B: Update Existing Issue
+1. Paste the **Issue ID** from previous submission in the Issue ID field
+2. Update the Root Cause, Solution, or Status as needed
+3. Optionally change the Plant ID
+4. Click **"📤 Send to SAP BTP"**
+5. System will update the existing issue via PATCH request
+6. Success response confirms the update
+
+### Step 4: Track Issue
+- **After Create**: Use the returned IssueId to update the issue in future analyses
+- **After Update**: The status and resolution are now current in SAP BTP
+- Navigate to SAP BTP to track workflow progress
 
 ## Example Workflow
 
@@ -97,6 +114,46 @@ Plant ID: 1000
   "Status": "OPEN"
 }
 ```
+
+## Issue ID Workflow
+
+### First Submission (Create)
+```
+Issue Analysis
+     ↓
+Leave Issue ID field EMPTY
+     ↓
+Click "Send to SAP BTP"
+     ↓
+POST /PlantDoc (creates new record)
+     ↓
+Response includes IssueId: 550e8400-e29b-41d4-a716-446655440000
+     ↓
+✅ Save this IssueId for updates
+```
+
+### Subsequent Submissions (Update)
+```
+New Analysis Report
+     ↓
+Paste previous IssueId in Issue ID field
+     ↓
+Update Root Cause, Solution, or Status
+     ↓
+Click "Send to SAP BTP"
+     ↓
+PATCH /PlantDoc(IssueId='550e8400...') (updates existing record)
+     ↓
+Response: HTTP 200 OK or 204 No Content
+     ↓
+✅ Existing issue in SAP BTP is now updated
+```
+
+### Example Workflow
+1. **Day 1**: Upload logs → Get IssueId `ABC123` → Save it
+2. **Day 2**: New analysis → Paste `ABC123` → Update status to IN_PROGRESS
+3. **Day 3**: Resolution found → Paste `ABC123` → Update status to COMPLETED
+4. **SAP BTP**: Single issue record with full history of updates
 
 ## Setting Environment Variables
 

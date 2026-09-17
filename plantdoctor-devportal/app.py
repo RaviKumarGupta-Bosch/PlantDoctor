@@ -199,8 +199,8 @@ def format_structured_analysis(structured: dict) -> None:
         st.info("Recommendations to prevent this issue in the future would appear here")
 
 
-def send_to_sap_btp(plant_doc_data: dict) -> tuple[bool, str]:
-    """Send issue to SAP BTP OData V4 service."""
+def send_to_sap_btp(plant_doc_data: dict, issue_id: str = None) -> tuple[bool, str]:
+    """Send issue to SAP BTP OData V4 service (create or update)."""
     
     # SAP BTP Configuration
     SAP_BTP_BASE_URL = os.getenv(
@@ -223,7 +223,6 @@ def send_to_sap_btp(plant_doc_data: dict) -> tuple[bool, str]:
     }
     
     try:
-        url = f"{SAP_BTP_BASE_URL}PlantDoc"
         headers = {
             "Content-Type": "application/json",
         }
@@ -233,21 +232,42 @@ def send_to_sap_btp(plant_doc_data: dict) -> tuple[bool, str]:
         if SAP_BTP_USERNAME and SAP_BTP_PASSWORD:
             auth = (SAP_BTP_USERNAME, SAP_BTP_PASSWORD)
         
-        response = requests.post(
-            url,
-            json=payload,
-            headers=headers,
-            auth=auth,
-            timeout=10,
-        )
+        # Determine if creating or updating
+        if issue_id and issue_id.strip():
+            # UPDATE: Use PATCH method
+            url = f"{SAP_BTP_BASE_URL}PlantDoc(IssueId='{issue_id}')"
+            response = requests.patch(
+                url,
+                json=payload,
+                headers=headers,
+                auth=auth,
+                timeout=10,
+            )
+            
+            if response.status_code in [200, 204]:
+                return True, f"✅ Issue updated successfully!\nIssue ID: {issue_id}"
+            else:
+                error_msg = response.text if response.text else f"HTTP {response.status_code}"
+                return False, f"❌ SAP BTP Update Error: {error_msg}"
         
-        if response.status_code in [200, 201]:
-            result = response.json() if response.text else {"status": "success"}
-            issue_id = result.get("IssueId", "Generated successfully")
-            return True, f"✅ Issue created successfully!\nIssue ID: {issue_id}"
         else:
-            error_msg = response.text if response.text else f"HTTP {response.status_code}"
-            return False, f"❌ SAP BTP Error: {error_msg}"
+            # CREATE: Use POST method
+            url = f"{SAP_BTP_BASE_URL}PlantDoc"
+            response = requests.post(
+                url,
+                json=payload,
+                headers=headers,
+                auth=auth,
+                timeout=10,
+            )
+            
+            if response.status_code in [200, 201]:
+                result = response.json() if response.text else {"status": "success"}
+                issue_id_created = result.get("IssueId", "Generated successfully")
+                return True, f"✅ Issue created successfully!\nIssue ID: {issue_id_created}\n\nSave this ID for future updates: `{issue_id_created}`"
+            else:
+                error_msg = response.text if response.text else f"HTTP {response.status_code}"
+                return False, f"❌ SAP BTP Error: {error_msg}"
     
     except requests.exceptions.ConnectionError:
         return False, "❌ Cannot connect to SAP BTP. Check SAP_BTP_BASE_URL configuration."
@@ -431,6 +451,22 @@ with tab2:
                 st.markdown("---")
                 st.markdown("### 🚀 Submit to SAP BTP")
                 
+                # Issue ID input for updates
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    issue_id_input = st.text_input(
+                        "Issue ID (optional - leave empty to create new, or paste existing ID to update)",
+                        value="",
+                        placeholder="e.g., 550e8400-e29b-41d4-a716-446655440000",
+                        help="If you have an existing Issue ID from a previous submission, paste it here to update that issue instead of creating a new one."
+                    )
+                with col2:
+                    if issue_id_input.strip():
+                        st.info("🔄 **Update Mode**\nWill update existing issue")
+                    else:
+                        st.info("✨ **Create Mode**\nWill create new issue")
+                
+                # Send to SAP BTP Button
                 col1, col2, col3 = st.columns([2, 1, 1])
                 
                 with col1:
@@ -447,10 +483,13 @@ with tab2:
                         }
                         
                         with st.spinner("📡 Sending to SAP BTP..."):
-                            success, message = send_to_sap_btp(plant_doc_data)
+                            success, message = send_to_sap_btp(plant_doc_data, issue_id_input.strip() if issue_id_input else None)
                         
                         if success:
                             st.success(message)
+                            # Copy issue ID to clipboard info
+                            if not issue_id_input.strip():
+                                st.info("💡 **Tip:** Copy the Issue ID shown above and paste it here next time to update this issue.")
                         else:
                             st.error(message)
                 
