@@ -9,9 +9,9 @@
 # WIF exchanges the GitHub Actions OIDC token for short-lived GCP credentials.
 #
 # Target GCP project (set via repo vars, see README "Deploying to Cloud Run"):
-#   Project name:   PlantDoctor-TeamCodingAura
-#   Project number: 305630320430
-#   Project ID:     plantdoctor-teamcodingaura
+#   Project name:   PlantDoctor-CodingAura
+#   Project number: 655336664371
+#   Project ID:     plantdoctor-codingaura
 
 name: Deploy plantdoctor-devportal to Cloud Run
 
@@ -29,8 +29,8 @@ permissions:
   id-token: write
 
 env:
-  REGION: "${{ vars.REGION }}"
-  PROJECT_ID: "${{ vars.PROJECT_ID }}"
+  REGION: "${{ vars.REGION || 'asia-south1' }}"
+  PROJECT_ID: "${{ vars.PROJECT_ID || 'plantdoctor-codingaura' }}"
   AR_REPO: "adk-agents"
   GCP_WORKLOAD_IDENTITY_PROVIDER: "${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
   GCP_SERVICE_ACCOUNT: "${{ vars.GCP_SERVICE_ACCOUNT }}"
@@ -59,21 +59,15 @@ jobs:
           echo "🔧 Configuring Docker for Artifact Registry..."
           gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
-      - name: Ensure the shared service account can use Vertex AI and Secret Manager
+      - name: Ensure the service account has required GCP roles
         run: |
-          echo "🔐 Ensuring the shared service account has the required GCP roles..."
-          gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
-            --member="serviceAccount:${GCP_SERVICE_ACCOUNT}" \
-            --role="roles/aiplatform.user" \
-            --condition=None 2>/dev/null || echo "Vertex AI access already configured"
-          # secretmanager.admin (not just secretAccessor) is required because this
-          # same service account both creates/updates SAP_BTP_CLIENT_SECRET below
-          # during CI and reads it at Cloud Run runtime; secretAccessor alone
-          # cannot create secrets or add versions.
-          gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
-            --member="serviceAccount:${GCP_SERVICE_ACCOUNT}" \
-            --role="roles/secretmanager.admin" \
-            --condition=None 2>/dev/null || echo "Secret Manager access already configured"
+          echo "🔐 Ensuring the service account has the required GCP roles..."
+          echo "Service Account: ${GCP_SERVICE_ACCOUNT}"
+          # Verify roles are assigned
+          gcloud projects get-iam-policy "${PROJECT_ID}" \
+            --flatten="bindings[].members" \
+            --filter="bindings.members:serviceAccount:${GCP_SERVICE_ACCOUNT}" \
+            --format="table(bindings.role)" || echo "Checking assigned roles"
 
       - name: Ensure SAP_BTP_CLIENT_SECRET exists in Secret Manager
         run: |
