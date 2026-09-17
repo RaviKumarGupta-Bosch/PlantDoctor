@@ -20,12 +20,12 @@ PROJECT_NUMBER="${PROJECT_NUMBER:-305630320430}"
 REGION="${REGION:-us-central1}"
 AR_REPO="${AR_REPO:-adk-agents}"
 
-# GitHub Enterprise Server host and "org/repo" slug that is allowed to
+# GitHub host and "org/repo" slug that is allowed to
 # impersonate the deployment service account. Restricting the WIF provider's
-# attribute-condition to this exact repo prevents any other repo on the GHES
-# instance from assuming this identity.
-GH_HOST="${GH_HOST:-github.boschdevcloud.com}"
-GH_REPO="${GH_REPO:-PLT3KOR/PlantDoctor}"
+# attribute-condition to this exact repo prevents any other repo on GitHub
+# from assuming this identity.
+GH_HOST="${GH_HOST:-github.com}"
+GH_REPO="${GH_REPO:-RaviKumarGupta-Bosch/PlantDoctor}"
 
 POOL_ID="${POOL_ID:-github-actions-pool}"
 PROVIDER_ID="${PROVIDER_ID:-github-actions-provider}"
@@ -107,23 +107,22 @@ gcloud iam workload-identity-pools describe "${POOL_ID}" \
     --display-name="GitHub Actions (GHES) Pool"
 
 # ---------------------------------------------------------------------------
-# 6. Create the OIDC provider trusting the GHES instance's token issuer,
+# 6. Create the OIDC provider trusting GitHub's token issuer,
 #    restricted to this exact repository.
-#
-#    NOTE: verify --issuer-uri against current google-github-actions/auth /
-#    GitHub Enterprise Server documentation before running in an environment
-#    without internet access to confirm live docs. GHES exposes its Actions
-#    OIDC issuer at https://<host>/_services/token as of current GitHub
-#    Enterprise Server releases.
 # ---------------------------------------------------------------------------
 echo "🪪 Ensuring OIDC provider '${PROVIDER_ID}' exists..."
+ISSUER_URI="https://token.actions.githubusercontent.com"
+if [ "${GH_HOST}" != "github.com" ]; then
+  ISSUER_URI="https://${GH_HOST}/_services/token"
+fi
+
 gcloud iam workload-identity-pools providers describe "${PROVIDER_ID}" \
   --project="${PROJECT_ID}" --location="global" --workload-identity-pool="${POOL_ID}" >/dev/null 2>&1 || \
   gcloud iam workload-identity-pools providers create-oidc "${PROVIDER_ID}" \
     --project="${PROJECT_ID}" \
     --location="global" \
     --workload-identity-pool="${POOL_ID}" \
-    --issuer-uri="https://${GH_HOST}/_services/token" \
+    --issuer-uri="${ISSUER_URI}" \
     --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref" \
     --attribute-condition="assertion.repository=='${GH_REPO}'"
 
