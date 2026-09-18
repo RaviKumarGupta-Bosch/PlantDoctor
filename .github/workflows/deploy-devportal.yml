@@ -26,7 +26,7 @@ permissions:
   id-token: write
 
 env:
-  REGION: "${{ vars.REGION || 'asia-south1' }}"
+  REGION: "${{ vars.REGION || 'asia-northeast1' }}"
   PROJECT_ID: "${{ vars.PROJECT_ID || 'plantdoctor-codingaura' }}"
   AR_REPO: "adk-agents"
   GCP_WORKLOAD_IDENTITY_PROVIDER: "${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
@@ -115,7 +115,7 @@ jobs:
             --port=8080 \
             --timeout=300 \
             --memory=1Gi \
-            --set-env-vars="VERTEX_PROJECT_ID=${PROJECT_ID},VERTEX_LOCATION=${REGION},GOOGLE_GENAI_USE_VERTEXAI=true,GEMINI_MODEL=gemini-3.8-flash,SAP_BTP_MOCK_MODE=${{ vars.SAP_BTP_MOCK_MODE }}" \
+            --set-env-vars="VERTEX_PROJECT_ID=${PROJECT_ID},VERTEX_LOCATION=${REGION},GOOGLE_GENAI_USE_VERTEXAI=true,GEMINI_MODEL=gemini-2.5-flash,SAP_BTP_MOCK_MODE=${{ vars.SAP_BTP_MOCK_MODE }}" \
             --set-secrets="SAP_BTP_CLIENT_SECRET=SAP_BTP_CLIENT_SECRET:latest"
 
       - name: Grant Public Access to Cloud Run Service

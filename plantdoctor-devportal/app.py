@@ -17,10 +17,13 @@ except Exception:  # pragma: no cover
 SYSTEM_PROMPT_PATH = Path(__file__).resolve().parent / "system_prompt" / "default_prompt.txt"
 
 # Gemini Model Configuration
-# Current Best Model: gemini-3.8-flash (latest, recommended)
-# Fallback options: gemini-3.7-flash, gemini-2.5-flash, gemini-1.5-pro
-# See: https://ai.google.dev/gemini-api/docs/models
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")  # Latest, most intelligent
+# Region: asia-northeast1 (Tokyo) - Stable, all models available
+# Models available in Tokyo:
+#   - gemini-2.5-flash (stable, best price-performance) ✅
+#   - gemini-2.5-pro (advanced, more reasoning)
+#   - gemini-3.8-flash (latest)
+# See: https://ai.google.dev/gemini-api/docs/available-regions
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")  # Stable, proven in asia-northeast1
 
 
 def load_system_prompt() -> str:

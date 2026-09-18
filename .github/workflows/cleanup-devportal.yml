@@ -44,7 +44,7 @@ permissions:
   id-token: write
 
 env:
-  REGION: "${{ vars.REGION || 'asia-south1' }}"
+  REGION: "${{ vars.REGION || 'asia-northeast1' }}"
   PROJECT_ID: "${{ vars.PROJECT_ID || 'plantdoctor-codingaura' }}"
   AR_REPO: "adk-agents"
   GCP_WORKLOAD_IDENTITY_PROVIDER: "${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}"
