@@ -2,6 +2,7 @@ import os
 import json
 import zipfile
 import tempfile
+import base64
 from pathlib import Path
 import requests
 
@@ -23,7 +24,7 @@ SYSTEM_PROMPT_PATH = Path(__file__).resolve().parent / "system_prompt" / "defaul
 #   - gemini-2.5-pro (advanced, more reasoning)
 #   - gemini-3.8-flash (latest)
 # See: https://ai.google.dev/gemini-api/docs/available-regions
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")  # Stable, proven in asia-northeast1
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")  # Stable, proven in asia-northeast1
 
 
 def load_system_prompt() -> str:
@@ -283,9 +284,45 @@ def send_to_sap_btp(plant_doc_data: dict, issue_id: str = None) -> tuple[bool, s
         return False, f"❌ Error: {str(e)}"
 
 
+def factory_icon_data_uri() -> str:
+    """Render the industrial plant icon as a base64 data URI (safer than raw inline SVG in markdown)."""
+    svg = (
+        '<svg width="72" height="72" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">'
+        '<rect x="10" y="40" width="80" height="40" fill="#FFFFFF" stroke="#003A7A" stroke-width="2"/>'
+        '<rect x="15" y="45" width="8" height="8" fill="#87CEEB" stroke="#003A7A" stroke-width="1"/>'
+        '<rect x="28" y="45" width="8" height="8" fill="#87CEEB" stroke="#003A7A" stroke-width="1"/>'
+        '<rect x="41" y="45" width="8" height="8" fill="#87CEEB" stroke="#003A7A" stroke-width="1"/>'
+        '<rect x="54" y="45" width="8" height="8" fill="#87CEEB" stroke="#003A7A" stroke-width="1"/>'
+        '<rect x="67" y="45" width="8" height="8" fill="#87CEEB" stroke="#003A7A" stroke-width="1"/>'
+        '<rect x="15" y="58" width="8" height="8" fill="#87CEEB" stroke="#003A7A" stroke-width="1"/>'
+        '<rect x="28" y="58" width="8" height="8" fill="#87CEEB" stroke="#003A7A" stroke-width="1"/>'
+        '<rect x="41" y="58" width="8" height="8" fill="#87CEEB" stroke="#003A7A" stroke-width="1"/>'
+        '<rect x="54" y="58" width="8" height="8" fill="#87CEEB" stroke="#003A7A" stroke-width="1"/>'
+        '<rect x="67" y="58" width="8" height="8" fill="#87CEEB" stroke="#003A7A" stroke-width="1"/>'
+        '<rect x="41" y="65" width="8" height="15" fill="#0066CC" stroke="#003A7A" stroke-width="1"/>'
+        '<circle cx="48" cy="72" r="1" fill="#FFD700"/>'
+        '<rect x="18" y="15" width="6" height="25" fill="#696969" stroke="#003A7A" stroke-width="2"/>'
+        '<ellipse cx="21" cy="15" rx="3" ry="2" fill="#696969" stroke="#003A7A" stroke-width="1"/>'
+        '<circle cx="20" cy="10" r="2" fill="#A9A9A9" opacity="0.7"/>'
+        '<circle cx="22" cy="8" r="2" fill="#A9A9A9" opacity="0.6"/>'
+        '<rect x="76" y="20" width="6" height="20" fill="#696969" stroke="#003A7A" stroke-width="2"/>'
+        '<ellipse cx="79" cy="20" rx="3" ry="2" fill="#696969" stroke="#003A7A" stroke-width="1"/>'
+        '<circle cx="78" cy="14" r="2" fill="#A9A9A9" opacity="0.7"/>'
+        '<circle cx="80" cy="12" r="2" fill="#A9A9A9" opacity="0.6"/>'
+        '<polygon points="10,40 30,25 70,25 90,40" fill="#E8F1FC" stroke="#003A7A" stroke-width="2"/>'
+        '<line x1="35" y1="35" x2="65" y2="35" stroke="#0066CC" stroke-width="2"/>'
+        '<circle cx="40" cy="35" r="2" fill="#0066CC"/>'
+        '<circle cx="50" cy="35" r="2" fill="#0066CC"/>'
+        '<circle cx="60" cy="35" r="2" fill="#0066CC"/>'
+        '</svg>'
+    )
+    encoded = base64.b64encode(svg.encode("utf-8")).decode("utf-8")
+    return f"data:image/svg+xml;base64,{encoded}"
+
+
 st.set_page_config(
     page_title="PlantDoctor DevPortal", 
-    page_icon="🌿", 
+    page_icon="🏭", 
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -295,97 +332,127 @@ st.set_page_config(
 # ============================================================================
 st.markdown("""
 <style>
-    /* SAP Blue Theme */
-    :root {
-        --sap-blue-primary: #0066CC;
-        --sap-blue-dark: #003A7A;
-        --sap-blue-light: #E8F1FC;
-        --plant-green: #2D5016;
-    }
-    
-    /* Main container */
-    .main {
-        background: linear-gradient(135deg, #f5f7fa 0%, #E8F1FC 100%);
-        padding-top: 0 !important;
-    }
-    
-    /* Remove top margin */
+    /* Remove default top padding */
     .block-container {
-        padding-top: 0 !important;
+        padding-top: 1.5rem !important;
+        max-width: 1100px;
     }
-    
-    /* Header styling */
-    h1 {
-        color: #0066CC;
-        border-bottom: 3px solid #0066CC;
-        padding-bottom: 10px;
-        margin-bottom: 5px;
+
+    /* Main container */
+    .stApp {
+        background: linear-gradient(135deg, #f5f7fa 0%, #E8F1FC 100%);
     }
-    
-    h2 {
+
+    /* Banner header */
+    .pd-banner {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        background: linear-gradient(90deg, #003A7A 0%, #0066CC 100%);
+        border-radius: 14px;
+        padding: 22px 28px;
+        margin-bottom: 22px;
+        box-shadow: 0 4px 14px rgba(0, 58, 122, 0.25);
+    }
+    .pd-banner img {
+        background: #ffffff;
+        border-radius: 10px;
+        padding: 8px;
+    }
+    .pd-banner-text h1 {
+        color: #ffffff;
+        font-size: 1.9rem;
+        margin: 0;
+        border: none;
+        padding: 0;
+    }
+    .pd-banner-text p {
+        color: #E8F1FC;
+        margin: 2px 0 0 0;
+        font-size: 0.95rem;
+    }
+
+    /* Card sections */
+    .pd-card {
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 18px 22px;
+        margin-bottom: 18px;
+        box-shadow: 0 2px 8px rgba(0, 58, 122, 0.08);
+        border: 1px solid #D6E4F5;
+    }
+    .pd-card-title {
         color: #003A7A;
+        font-weight: 700;
+        font-size: 1.05rem;
+        margin-bottom: 10px;
     }
-    
-    /* Chat container */
-    .chat-container {
-        background: white;
-        border: 1px solid #0066CC;
-        border-radius: 8px;
-        padding: 15px;
-        margin: 10px 0;
-    }
-    
+
     /* Input area */
-    .stTextArea textarea {
-        border: 2px solid #0066CC !important;
-        border-radius: 6px !important;
+    .stTextArea textarea, .stTextInput input {
+        border: 1.5px solid #99C2EA !important;
+        border-radius: 8px !important;
     }
-    
+
     .stFileUploader {
         border: 2px dashed #0066CC !important;
-        border-radius: 6px !important;
-        padding: 20px !important;
+        border-radius: 10px !important;
+        padding: 16px !important;
+        background: #F7FAFE;
     }
-    
+
     /* Buttons */
     .stButton > button {
         background-color: #0066CC !important;
         color: white !important;
-        border-radius: 6px !important;
+        border-radius: 8px !important;
         font-weight: 600 !important;
         border: none !important;
+        transition: background-color 0.15s ease-in-out;
     }
-    
     .stButton > button:hover {
         background-color: #003A7A !important;
     }
-    
-    /* Info boxes */
+
+    /* Radio as pills */
+    div[role="radiogroup"] {
+        gap: 6px;
+    }
+
+    /* Info / status boxes */
     .stInfo {
         background-color: #E8F1FC !important;
         border-left: 4px solid #0066CC !important;
-        border-radius: 6px !important;
+        border-radius: 8px !important;
     }
-    
     .stSuccess {
         background-color: #E8F5E9 !important;
         border-left: 4px solid #4CAF50 !important;
+        border-radius: 8px !important;
     }
-    
     .stWarning {
         background-color: #FFF3E0 !important;
         border-left: 4px solid #FF9800 !important;
+        border-radius: 8px !important;
     }
-    
     .stError {
         background-color: #FFEBEE !important;
         border-left: 4px solid #F44336 !important;
+        border-radius: 8px !important;
     }
-    
+
     /* Expander */
     .streamlit-expanderHeader {
         background-color: #E8F1FC;
-        border-left: 4px solid #0066CC;
+        border-radius: 8px;
+    }
+
+    /* Metrics */
+    div[data-testid="stMetric"] {
+        background: #F7FAFE;
+        border: 1px solid #D6E4F5;
+        border-radius: 10px;
+        padding: 10px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -405,88 +472,44 @@ if "context_data" not in st.session_state:
     st.session_state.context_data = {}
 
 # ============================================================================
-# HEADER WITH PLANT PICTURE
+# HEADER BANNER (single markdown block, no heading-anchor / raw multi-line SVG)
 # ============================================================================
-col1, col2 = st.columns([1, 4])
-
-with col1:
-    # Industrial/Factory SVG icon
-    st.markdown("""
-    <svg width="80" height="80" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-        <!-- Factory Building Base -->
-        <rect x="10" y="40" width="80" height="40" fill="#D3D3D3" stroke="#333" stroke-width="2"/>
-        
-        <!-- Windows -->
-        <rect x="15" y="45" width="8" height="8" fill="#87CEEB" stroke="#333" stroke-width="1"/>
-        <rect x="28" y="45" width="8" height="8" fill="#87CEEB" stroke="#333" stroke-width="1"/>
-        <rect x="41" y="45" width="8" height="8" fill="#87CEEB" stroke="#333" stroke-width="1"/>
-        <rect x="54" y="45" width="8" height="8" fill="#87CEEB" stroke="#333" stroke-width="1"/>
-        <rect x="67" y="45" width="8" height="8" fill="#87CEEB" stroke="#333" stroke-width="1"/>
-        
-        <rect x="15" y="58" width="8" height="8" fill="#87CEEB" stroke="#333" stroke-width="1"/>
-        <rect x="28" y="58" width="8" height="8" fill="#87CEEB" stroke="#333" stroke-width="1"/>
-        <rect x="41" y="58" width="8" height="8" fill="#87CEEB" stroke="#333" stroke-width="1"/>
-        <rect x="54" y="58" width="8" height="8" fill="#87CEEB" stroke="#333" stroke-width="1"/>
-        <rect x="67" y="58" width="8" height="8" fill="#87CEEB" stroke="#333" stroke-width="1"/>
-        
-        <!-- Door -->
-        <rect x="41" y="65" width="8" height="15" fill="#8B4513" stroke="#333" stroke-width="1"/>
-        <circle cx="48" cy="72" r="1" fill="#FFD700"/>
-        
-        <!-- Left Smokestack -->
-        <rect x="18" y="15" width="6" height="25" fill="#696969" stroke="#333" stroke-width="2"/>
-        <ellipse cx="21" cy="15" rx="3" ry="2" fill="#696969" stroke="#333" stroke-width="1"/>
-        
-        <!-- Smoke from left stack -->
-        <circle cx="20" cy="10" r="2" fill="#A9A9A9" opacity="0.7"/>
-        <circle cx="22" cy="8" r="2" fill="#A9A9A9" opacity="0.6"/>
-        
-        <!-- Right Smokestack -->
-        <rect x="76" y="20" width="6" height="20" fill="#696969" stroke="#333" stroke-width="2"/>
-        <ellipse cx="79" cy="20" rx="3" ry="2" fill="#696969" stroke="#333" stroke-width="1"/>
-        
-        <!-- Smoke from right stack -->
-        <circle cx="78" cy="14" r="2" fill="#A9A9A9" opacity="0.7"/>
-        <circle cx="80" cy="12" r="2" fill="#A9A9A9" opacity="0.6"/>
-        
-        <!-- Roof line -->
-        <polygon points="10,40 30,25 70,25 90,40" fill="#B0B0B0" stroke="#333" stroke-width="2"/>
-        
-        <!-- Conveyor/Production line indicator -->
-        <line x1="35" y1="35" x2="65" y2="35" stroke="#0066CC" stroke-width="2"/>
-        <circle cx="40" cy="35" r="2" fill="#0066CC"/>
-        <circle cx="50" cy="35" r="2" fill="#0066CC"/>
-        <circle cx="60" cy="35" r="2" fill="#0066CC"/>
-    </svg>
-    """, unsafe_allow_html=True)
-
-with col2:
-    st.title("🌿 PlantDoctor DevPortal")
-    st.caption("**Production Plant Diagnostics for SAP Enterprise**")
-    st.caption("🚀 AI-powered issue analysis and SAP BTP integration")
+st.markdown(
+    f"""
+    <div class="pd-banner">
+        <img src="{factory_icon_data_uri()}" width="64" height="64" alt="PlantDoctor" />
+        <div class="pd-banner-text">
+            <h1>PlantDoctor DevPortal</h1>
+            <p>Production Plant Diagnostics for SAP Enterprise</p>
+            <p>🚀 AI-powered issue analysis and SAP BTP integration</p>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 # ============================================================================
 # MAIN UNIFIED CHAT INTERFACE
 # ============================================================================
 
 # Chat display area
-chat_container = st.container()
-
-with chat_container:
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+if st.session_state.messages:
+    with st.container(border=True):
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
 
 # ============================================================================
 # INPUT SECTION
 # ============================================================================
-st.write("**Analyse Issue**")
+st.markdown('<div class="pd-card-title">Analyse Issue</div>', unsafe_allow_html=True)
 
 # Option selection
 input_method = st.radio(
     "How would you like to provide information?",
     ["📝 Text Description", "📁 Upload ZIP File", "❓ Follow-up Question"],
-    horizontal=True
+    horizontal=True,
+    label_visibility="collapsed",
 )
 
 # Text input mode
@@ -529,13 +552,12 @@ if input_method == "📝 Text Description":
                         st.session_state.current_analysis = analysis
                         
                         # Display structured analysis
-                        st.markdown("---")
-                        structured = structure_analysis_output(analysis)
-                        format_structured_analysis(structured)
-                        
+                        with st.container(border=True):
+                            structured = structure_analysis_output(analysis)
+                            format_structured_analysis(structured)
+
                         # SAP BTP submission option
-                        st.markdown("---")
-                        st.subheader("📤 Submit to SAP BTP")
+                        st.subheader("📤 Submit to SAP BTP", anchor=False)
                         
                         summary = extract_summary_from_analysis(analysis)
                         st.session_state.current_summary = summary
@@ -626,13 +648,12 @@ elif input_method == "📁 Upload ZIP File":
                             st.session_state.messages.append({"role": "assistant", "content": analysis})
                             st.session_state.current_analysis = analysis
                             
-                            st.markdown("---")
-                            structured = structure_analysis_output(analysis)
-                            format_structured_analysis(structured)
-                            
+                            with st.container(border=True):
+                                structured = structure_analysis_output(analysis)
+                                format_structured_analysis(structured)
+
                             # SAP BTP submission
-                            st.markdown("---")
-                            st.subheader("📤 Submit to SAP BTP")
+                            st.subheader("📤 Submit to SAP BTP", anchor=False)
                             
                             summary = extract_summary_from_analysis(analysis)
                             st.session_state.current_summary = summary
