@@ -30,8 +30,8 @@ def build_client():
     if genai is None:
         return None
 
-    project_id = os.getenv("VERTEX_PROJECT_ID")
-    location = os.getenv("VERTEX_LOCATION")
+    project_id = os.getenv("VERTEX_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
+    location = os.getenv("VERTEX_LOCATION") or os.getenv("GOOGLE_CLOUD_LOCATION") or os.getenv("GOOGLE_CLOUD_REGION")
     if not project_id or not location:
         return None
 

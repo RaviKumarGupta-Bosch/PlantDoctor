@@ -125,9 +125,10 @@ jobs:
         run: |
           echo "🌐 Updating PUBLIC_URL for the deployed service..."
           SERVICE_URL="$(gcloud run services describe "plantdoctor-devportal" --project="${PROJECT_ID}" --region="${REGION}" --format='value(status.url)')"
+          # --update-env-vars (not --set-env-vars) so the Vertex/SAP vars set at deploy time are preserved.
           gcloud run services update "plantdoctor-devportal" \
             --project="${PROJECT_ID}" --region="${REGION}" \
-            --set-env-vars="PUBLIC_URL=${SERVICE_URL}"
+            --update-env-vars="PUBLIC_URL=${SERVICE_URL}"
 
       - name: Deployment Summary
         run: |
