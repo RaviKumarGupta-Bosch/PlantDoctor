@@ -404,30 +404,53 @@ if "context_data" not in st.session_state:
 col1, col2 = st.columns([1, 4])
 
 with col1:
-    # Simple plant SVG icon
+    # Industrial/Factory SVG icon
     st.markdown("""
     <svg width="80" height="80" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-        <!-- Pot -->
-        <path d="M 30 50 L 20 80 L 80 80 L 70 50 Z" fill="#D2691E" stroke="#8B4513" stroke-width="2"/>
-        <ellipse cx="50" cy="50" rx="20" ry="8" fill="#CD853F" stroke="#8B4513" stroke-width="2"/>
+        <!-- Factory Building Base -->
+        <rect x="10" y="40" width="80" height="40" fill="#D3D3D3" stroke="#333" stroke-width="2"/>
         
-        <!-- Soil -->
-        <ellipse cx="50" cy="52" rx="18" ry="6" fill="#8B7355"/>
+        <!-- Windows -->
+        <rect x="15" y="45" width="8" height="8" fill="#87CEEB" stroke="#333" stroke-width="1"/>
+        <rect x="28" y="45" width="8" height="8" fill="#87CEEB" stroke="#333" stroke-width="1"/>
+        <rect x="41" y="45" width="8" height="8" fill="#87CEEB" stroke="#333" stroke-width="1"/>
+        <rect x="54" y="45" width="8" height="8" fill="#87CEEB" stroke="#333" stroke-width="1"/>
+        <rect x="67" y="45" width="8" height="8" fill="#87CEEB" stroke="#333" stroke-width="1"/>
         
-        <!-- Main stem -->
-        <path d="M 50 52 Q 50 30 45 15" stroke="#2D5016" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <rect x="15" y="58" width="8" height="8" fill="#87CEEB" stroke="#333" stroke-width="1"/>
+        <rect x="28" y="58" width="8" height="8" fill="#87CEEB" stroke="#333" stroke-width="1"/>
+        <rect x="41" y="58" width="8" height="8" fill="#87CEEB" stroke="#333" stroke-width="1"/>
+        <rect x="54" y="58" width="8" height="8" fill="#87CEEB" stroke="#333" stroke-width="1"/>
+        <rect x="67" y="58" width="8" height="8" fill="#87CEEB" stroke="#333" stroke-width="1"/>
         
-        <!-- Left leaf -->
-        <path d="M 50 40 Q 35 35 30 25" stroke="#2D5016" stroke-width="2" fill="none" stroke-linecap="round"/>
-        <path d="M 50 40 Q 40 28 35 18" stroke="#4CAF50" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <!-- Door -->
+        <rect x="41" y="65" width="8" height="15" fill="#8B4513" stroke="#333" stroke-width="1"/>
+        <circle cx="48" cy="72" r="1" fill="#FFD700"/>
         
-        <!-- Right leaf -->
-        <path d="M 50 40 Q 65 35 70 25" stroke="#2D5016" stroke-width="2" fill="none" stroke-linecap="round"/>
-        <path d="M 50 40 Q 60 28 65 18" stroke="#4CAF50" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <!-- Left Smokestack -->
+        <rect x="18" y="15" width="6" height="25" fill="#696969" stroke="#333" stroke-width="2"/>
+        <ellipse cx="21" cy="15" rx="3" ry="2" fill="#696969" stroke="#333" stroke-width="1"/>
         
-        <!-- Top leaf -->
-        <path d="M 45 15 L 40 5" stroke="#4CAF50" stroke-width="2" fill="none" stroke-linecap="round"/>
-        <path d="M 45 15 L 50 2" stroke="#66BB6A" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <!-- Smoke from left stack -->
+        <circle cx="20" cy="10" r="2" fill="#A9A9A9" opacity="0.7"/>
+        <circle cx="22" cy="8" r="2" fill="#A9A9A9" opacity="0.6"/>
+        
+        <!-- Right Smokestack -->
+        <rect x="76" y="20" width="6" height="20" fill="#696969" stroke="#333" stroke-width="2"/>
+        <ellipse cx="79" cy="20" rx="3" ry="2" fill="#696969" stroke="#333" stroke-width="1"/>
+        
+        <!-- Smoke from right stack -->
+        <circle cx="78" cy="14" r="2" fill="#A9A9A9" opacity="0.7"/>
+        <circle cx="80" cy="12" r="2" fill="#A9A9A9" opacity="0.6"/>
+        
+        <!-- Roof line -->
+        <polygon points="10,40 30,25 70,25 90,40" fill="#B0B0B0" stroke="#333" stroke-width="2"/>
+        
+        <!-- Conveyor/Production line indicator -->
+        <line x1="35" y1="35" x2="65" y2="35" stroke="#0066CC" stroke-width="2"/>
+        <circle cx="40" cy="35" r="2" fill="#0066CC"/>
+        <circle cx="50" cy="35" r="2" fill="#0066CC"/>
+        <circle cx="60" cy="35" r="2" fill="#0066CC"/>
     </svg>
     """, unsafe_allow_html=True)
 
