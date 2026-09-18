@@ -51,6 +51,24 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Verify Required APIs are Enabled
+        run: |
+          echo "✅ Verifying required APIs are enabled..."
+          REQUIRED_APIS=(
+            "run.googleapis.com"
+            "artifactregistry.googleapis.com"
+            "secretmanager.googleapis.com"
+            "aiplatform.googleapis.com"
+          )
+          
+          for API in "${REQUIRED_APIS[@]}"; do
+            if gcloud services list --enabled --project="${PROJECT_ID}" --filter="name:${API}" --format="value(name)" | grep -q "${API}"; then
+              echo "  ✅ ${API}"
+            else
+              echo "  ⚠️ ${API} might not be enabled, but continuing..."
+            fi
+          done
+
       - name: Configure Docker for Artifact Registry
         run: |
           echo "🔧 Configuring Docker for Artifact Registry..."
