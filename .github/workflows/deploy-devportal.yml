@@ -56,15 +56,30 @@ jobs:
           echo "🔧 Configuring Docker for Artifact Registry..."
           gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
-      - name: Enable required Google APIs
+      - name: Check required Google APIs
         run: |
-          echo "🔧 Ensuring required APIs are enabled..."
-          gcloud services enable \
-            run.googleapis.com \
-            artifactregistry.googleapis.com \
-            secretmanager.googleapis.com \
-            aiplatform.googleapis.com \
-            --project="${PROJECT_ID}"
+          echo "🔧 Checking required APIs..."
+          REQUIRED="run.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com aiplatform.googleapis.com"
+          ENABLED="$(gcloud services list --enabled --project="${PROJECT_ID}" --format='value(config.name)' 2>/dev/null || true)"
+          MISSING=""
+          for API in ${REQUIRED}; do
+            case " ${ENABLED} " in
+              *" ${API} "*) echo "✅ ${API}" ;;
+              *)
+                # The deployer SA is intentionally not a serviceUsageAdmin, so try and fall back to a warning.
+                if gcloud services enable "${API}" --project="${PROJECT_ID}" 2>/dev/null; then
+                  echo "✅ ${API} (enabled now)"
+                else
+                  echo "⚠️ ${API} is NOT enabled and this service account cannot enable it"
+                  MISSING="${MISSING} ${API}"
+                fi
+                ;;
+            esac
+          done
+          if [ -n "${MISSING}" ]; then
+            echo "::error::Enable the missing APIs with a project owner account: gcloud services enable${MISSING} --project=${PROJECT_ID}"
+            exit 1
+          fi
 
       - name: Ensure the service account has required GCP roles
         run: |
