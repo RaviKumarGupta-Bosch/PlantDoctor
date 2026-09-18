@@ -17,7 +17,10 @@ except Exception:  # pragma: no cover
 SYSTEM_PROMPT_PATH = Path(__file__).resolve().parent / "system_prompt" / "default_prompt.txt"
 
 # Gemini Model Configuration
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-pro")  # Advanced model by default
+# Current Best Model: gemini-3.8-flash (latest, recommended)
+# Fallback options: gemini-3.7-flash, gemini-2.5-flash, gemini-1.5-pro
+# See: https://ai.google.dev/gemini-api/docs/models
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")  # Latest, most intelligent
 
 
 def load_system_prompt() -> str:
