@@ -62,3 +62,6 @@ docs/images/
 
 # Windows
 apps/PlantSimulator/output/
+
+__pycache__/
+*.pyc
