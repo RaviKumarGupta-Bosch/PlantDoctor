@@ -334,8 +334,20 @@ st.markdown("""
 <style>
     /* Remove default top padding */
     .block-container {
-        padding-top: 1.5rem !important;
+        padding-top: 0.5rem !important;
         max-width: 1100px;
+    }
+
+    /* Collapse Streamlit's default header bar spacing */
+    header[data-testid="stHeader"] {
+        height: 0 !important;
+        background: transparent !important;
+    }
+    div[data-testid="stAppViewContainer"] > .main {
+        padding-top: 0 !important;
+    }
+    div[data-testid="stToolbar"] {
+        display: none !important;
     }
 
     /* Main container */
@@ -728,9 +740,35 @@ elif input_method == "❓ Follow-up Question":
         st.info("💡 Start with a text description or ZIP file upload to enable follow-up questions.")
 
 # ============================================================================
-# CLEAR CHAT HISTORY
+# SEND CURRENT ISSUE STATUS TO SAP BTP (works from any prior analysis)
 # ============================================================================
 st.markdown("---")
+st.subheader("📡 SAP BTP Status Update", anchor=False)
+
+if st.session_state.current_summary:
+    st.caption("Push the most recent analysis result to SAP BTP as an issue status update.")
+    if st.button("📤 Send current issue status to SAP BTP system", use_container_width=True):
+        summary = st.session_state.current_summary
+        plant_doc_data = {
+            "Plant": summary.get("plant", "1000"),
+            "rootcause": summary.get("rootcause", ""),
+            "solution": summary.get("solution", ""),
+            "status": summary.get("status", "OPEN"),
+        }
+
+        with st.spinner("📡 Sending current issue status to SAP BTP..."):
+            success, message = send_to_sap_btp(plant_doc_data)
+
+        if success:
+            st.success(message)
+        else:
+            st.error(message)
+else:
+    st.info("💡 Run a text or ZIP analysis first to enable sending the current issue status to SAP BTP.")
+
+# ============================================================================
+# CLEAR CHAT HISTORY
+# ============================================================================
 if st.button("🔄 Clear Chat History", use_container_width=True):
     st.session_state.messages = []
     st.session_state.zip_contents = None
