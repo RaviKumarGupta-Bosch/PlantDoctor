@@ -409,11 +409,21 @@ with tab2:
                     analysis_content = format_analysis_content(zip_contents, user_prompt)
                     
                     client = build_client()
-                    response = client.models.generate_content(
-                        model=GEMINI_MODEL,
-                        contents=analysis_content,
-                        config=types.GenerateContentConfig(system_instruction=prompt),
-                    )
+                    try:
+                        response = client.models.generate_content(
+                            model=GEMINI_MODEL,
+                            contents=analysis_content,
+                            config=types.GenerateContentConfig(system_instruction=prompt),
+                        )
+                    except Exception as exc:
+                        st.error(f"Vertex AI request failed: {exc}")
+                        if "SERVICE_DISABLED" in str(exc) or "aiplatform.googleapis.com" in str(exc):
+                            st.info(
+                                "Enable the Vertex AI API for this project, then retry:\n\n"
+                                "`gcloud services enable aiplatform.googleapis.com --project="
+                                f"{os.getenv('VERTEX_PROJECT_ID') or os.getenv('GOOGLE_CLOUD_PROJECT', '<project-id>')}`"
+                            )
+                        st.stop()
                     analysis_result = getattr(response, "text", None) or str(response)
                 
                 # Display results

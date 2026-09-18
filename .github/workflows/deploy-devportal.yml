@@ -56,10 +56,25 @@ jobs:
           echo "🔧 Configuring Docker for Artifact Registry..."
           gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
+      - name: Enable required Google APIs
+        run: |
+          echo "🔧 Ensuring required APIs are enabled..."
+          gcloud services enable \
+            run.googleapis.com \
+            artifactregistry.googleapis.com \
+            secretmanager.googleapis.com \
+            aiplatform.googleapis.com \
+            --project="${PROJECT_ID}"
+
       - name: Ensure the service account has required GCP roles
         run: |
           echo "🔐 Ensuring the service account has the required GCP roles..."
           echo "Service Account: ${GCP_SERVICE_ACCOUNT}"
+          # Vertex AI calls from the Cloud Run runtime identity require aiplatform.user.
+          gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+            --member="serviceAccount:${GCP_SERVICE_ACCOUNT}" \
+            --role="roles/aiplatform.user" \
+            --condition=None >/dev/null 2>&1 || echo "roles/aiplatform.user already granted"
           # Verify roles are assigned
           gcloud projects get-iam-policy "${PROJECT_ID}" \
             --flatten="bindings[].members" \
