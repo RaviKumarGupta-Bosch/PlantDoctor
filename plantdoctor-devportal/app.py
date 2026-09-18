@@ -306,6 +306,12 @@ st.markdown("""
     /* Main container */
     .main {
         background: linear-gradient(135deg, #f5f7fa 0%, #E8F1FC 100%);
+        padding-top: 0 !important;
+    }
+    
+    /* Remove top margin */
+    .block-container {
+        padding-top: 0 !important;
     }
     
     /* Header styling */
@@ -459,14 +465,11 @@ with col2:
     st.caption("**Production Plant Diagnostics for SAP Enterprise**")
     st.caption("🚀 AI-powered issue analysis and SAP BTP integration")
 
-st.markdown("---")
-
 # ============================================================================
 # MAIN UNIFIED CHAT INTERFACE
 # ============================================================================
 
 # Chat display area
-st.subheader("💬 Analysis Chat")
 chat_container = st.container()
 
 with chat_container:
@@ -477,7 +480,7 @@ with chat_container:
 # ============================================================================
 # INPUT SECTION
 # ============================================================================
-st.subheader("🔧 Start Analysis")
+st.write("**Analyse Issue**")
 
 # Option selection
 input_method = st.radio(
