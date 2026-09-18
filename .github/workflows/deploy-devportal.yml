@@ -74,40 +74,10 @@ jobs:
           echo "🔧 Configuring Docker for Artifact Registry..."
           gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
-      - name: Check required Google APIs
-        run: |
-          echo "🔧 Checking required APIs..."
-          REQUIRED="run.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com aiplatform.googleapis.com"
-          ENABLED="$(gcloud services list --enabled --project="${PROJECT_ID}" --format='value(config.name)' 2>/dev/null || true)"
-          MISSING=""
-          for API in ${REQUIRED}; do
-            case " ${ENABLED} " in
-              *" ${API} "*) echo "✅ ${API}" ;;
-              *)
-                # The deployer SA is intentionally not a serviceUsageAdmin, so try and fall back to a warning.
-                if gcloud services enable "${API}" --project="${PROJECT_ID}" 2>/dev/null; then
-                  echo "✅ ${API} (enabled now)"
-                else
-                  echo "⚠️ ${API} is NOT enabled and this service account cannot enable it"
-                  MISSING="${MISSING} ${API}"
-                fi
-                ;;
-            esac
-          done
-          if [ -n "${MISSING}" ]; then
-            echo "::error::Enable the missing APIs with a project owner account: gcloud services enable${MISSING} --project=${PROJECT_ID}"
-            exit 1
-          fi
-
       - name: Ensure the service account has required GCP roles
         run: |
-          echo "🔐 Ensuring the service account has the required GCP roles..."
+          echo "🔐 Verifying service account has required GCP roles..."
           echo "Service Account: ${GCP_SERVICE_ACCOUNT}"
-          # Vertex AI calls from the Cloud Run runtime identity require aiplatform.user.
-          gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
-            --member="serviceAccount:${GCP_SERVICE_ACCOUNT}" \
-            --role="roles/aiplatform.user" \
-            --condition=None >/dev/null 2>&1 || echo "roles/aiplatform.user already granted"
           # Verify roles are assigned
           gcloud projects get-iam-policy "${PROJECT_ID}" \
             --flatten="bindings[].members" \
