@@ -8,5 +8,7 @@
         <converters:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
         <converters:RoleToBrushConverter x:Key="RoleToBrushConverter"/>
         <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <converters:BooleanInverterConverter x:Key="BooleanInverterConverter"/>
+        <converters:ResolvedBackgroundConverter x:Key="ResolvedBackgroundConverter"/>
     </Application.Resources>
 </Application>

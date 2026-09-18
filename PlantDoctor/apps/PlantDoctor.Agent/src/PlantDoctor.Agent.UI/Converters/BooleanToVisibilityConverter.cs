@@ -6,6 +6,7 @@ namespace PlantDoctor.Agent.UI.Converters;
 
 /// <summary>
 /// Converts a boolean value to Visibility (true → Visible, false → Collapsed).
+/// Supports ConverterParameter="Reverse" to invert the logic.
 /// </summary>
 [ValueConversion(typeof(bool), typeof(Visibility))]
 public class BooleanToVisibilityConverter : IValueConverter
@@ -14,7 +15,9 @@ public class BooleanToVisibilityConverter : IValueConverter
     {
         if (value is bool boolValue)
         {
-            return boolValue ? Visibility.Visible : Visibility.Collapsed;
+            bool reverse = parameter?.ToString()?.ToLower() == "reverse";
+            var isVisible = reverse ? !boolValue : boolValue;
+            return isVisible ? Visibility.Visible : Visibility.Collapsed;
         }
         return Visibility.Collapsed;
     }
@@ -23,7 +26,8 @@ public class BooleanToVisibilityConverter : IValueConverter
     {
         if (value is Visibility visibility)
         {
-            return visibility == Visibility.Visible;
+            bool reverse = parameter?.ToString()?.ToLower() == "reverse";
+            return (visibility == Visibility.Visible) != reverse;
         }
         return false;
     }

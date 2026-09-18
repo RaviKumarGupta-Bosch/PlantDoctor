@@ -42,14 +42,33 @@ public static class PromptBuilder
         return sb.ToString();
     }
 
-    public static string BuildChatPrompt(string userMessage, IEnumerable<LogEntry> recent, string historyContext = "")
+    public static string BuildChatPrompt(
+        string userMessage,
+        IEnumerable<LogEntry> recent,
+        string historyContext = "",
+        string plantId = "",
+        string incidentContext = "")
     {
         var sb = new StringBuilder();
-        sb.AppendLine("RECENT LOGS (last 30 entries):");
-        foreach (var e in recent.TakeLast(30))
-            sb.AppendLine($"  {e.Timestamp:o} [{e.Level}] ({e.Source}) {e.Message}");
+        if (!string.IsNullOrWhiteSpace(plantId)) sb.AppendLine($"PLANT ID: {plantId}");
+        sb.AppendLine("PLANT LOGS (complete available 20-minute window):");
+        foreach (var e in recent)
+        {
+            sb.Append($"  {e.Timestamp:o} [{e.Level}] ({e.Source})");
+            if (!string.IsNullOrWhiteSpace(e.SensorName)) sb.Append($" Sensor={e.SensorName}");
+            if (!string.IsNullOrWhiteSpace(e.Value)) sb.Append($" Value={e.Value}");
+            if (!string.IsNullOrWhiteSpace(e.ErrorCode)) sb.Append($" ErrorCode={e.ErrorCode}");
+            sb.AppendLine($" Message={e.Message}");
+            if (!string.IsNullOrWhiteSpace(e.StackTrace)) sb.AppendLine($"    StackTrace={e.StackTrace}");
+        }
         sb.AppendLine();
-        if (!string.IsNullOrEmpty(historyContext))
+        if (!string.IsNullOrWhiteSpace(incidentContext))
+        {
+            sb.AppendLine("KNOWN INCIDENTS AND AI ARTIFACTS:");
+            sb.AppendLine(incidentContext);
+            sb.AppendLine();
+        }
+        if (!string.IsNullOrWhiteSpace(historyContext))
         {
             sb.AppendLine("CONVERSATION HISTORY:");
             sb.AppendLine(historyContext);

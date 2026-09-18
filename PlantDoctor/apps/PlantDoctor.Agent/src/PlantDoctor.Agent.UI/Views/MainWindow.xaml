@@ -35,12 +35,11 @@
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,5">
                         <TextBlock Text="Filter:" VerticalAlignment="Center" Margin="0,0,5,0" FontSize="11"/>
                         <TextBox x:Name="FilterTextBox"
-                                 Text="{Binding LogFilter, UpdateSourceTrigger=PropertyChanged}" 
+                                 Text="{Binding LogFilter, UpdateSourceTrigger=PropertyChanged, Delay=250}" 
                                  Width="150" 
                                  FontSize="11"
                                  VerticalContentAlignment="Center"
-                                 GotFocus="FilterTextBox_GotFocus"
-                                 LostFocus="FilterTextBox_LostFocus"/>
+                                 ToolTip="Search timestamp, level, source, sensor, value, error code, message, or stack trace"/>
                         <ComboBox Width="100" Margin="10,0,0,0" 
                                   VerticalContentAlignment="Center"
                                   SelectedValue="{Binding LogLevelFilter, Mode=TwoWay}"
@@ -57,9 +56,11 @@
                     </StackPanel>
                     
                     <!-- Log List -->
-                    <ListBox ItemsSource="{Binding FilteredLogs}" FontFamily="Consolas" 
+                    <ListBox ItemsSource="{Binding FilteredLogsView}" FontFamily="Consolas" 
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                             ScrollViewer.VerticalScrollBarVisibility="Auto">
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             ScrollViewer.CanContentScroll="True"
+                             ScrollViewer.IsDeferredScrollingEnabled="True">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Margin="2">
@@ -90,13 +91,17 @@
                         </StackPanel>
                     </DataTemplate>
                 </GroupBox.HeaderTemplate>
-                <DockPanel>
-                    <!-- Chat History -->
-                    <ListBox ItemsSource="{Binding Chat}" 
-                             DockPanel.Dock="Top"
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <ListBox x:Name="ChatListBox" ItemsSource="{Binding Chat}"
+                             Grid.Row="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              ScrollViewer.VerticalScrollBarVisibility="Auto"
-                             Margin="0,0,0,5">
+                             Margin="0,0,0,5"
+                             ScrollViewer.ScrollChanged="ChatScrollViewer_ScrollChanged">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <Border BorderBrush="LightGray" BorderThickness="1" 
@@ -108,6 +113,10 @@
                                                    TextWrapping="Wrap" 
                                                    LineHeight="18"
                                                    LineStackingStrategy="BlockLineHeight"/>
+                                        <ProgressBar IsIndeterminate="True"
+                                                     Height="3"
+                                                     Margin="0,6,0,0"
+                                                     Visibility="{Binding IsInProgress, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                                         <TextBlock Text="{Binding TimestampUtc, StringFormat={}{0:HH:mm:ss}}" 
                                                    Foreground="Gray" 
                                                    FontSize="10"
@@ -119,14 +128,12 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
 
-                    <!-- Chat Input and Controls -->
-                    <DockPanel DockPanel.Dock="Bottom" LastChildFill="True">
-                        <!-- Buttons Row -->
+                    <DockPanel Grid.Row="1" LastChildFill="True">
                         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,5">
                             <Button Content="📤 Export" 
                                     Command="{Binding ExportChatCommand}" 
                                     Margin="0,0,5,0"
-                                    ToolTip="Export chat history"/>
+                                    ToolTip="Export the last 20 minutes of plant logs and available chat history as one ZIP"/>
                             <Button Content="🗑️ Clear" 
                                     Command="{Binding ClearChatCommand}" 
                                     Margin="0,0,5,0"
@@ -137,7 +144,6 @@
                                     Width="70"
                                     FontWeight="Bold"/>
                         </StackPanel>
-                        <!-- Chat Input TextBox -->
                         <TextBox x:Name="ChatInputTextBox"
                                  Text="{Binding ChatInput, UpdateSourceTrigger=PropertyChanged}" 
                                  KeyDown="ChatTextBox_KeyDown"
@@ -150,10 +156,9 @@
                                  VerticalScrollBarVisibility="Auto"
                                  Foreground="Gray"
                                  GotFocus="ChatInputTextBox_GotFocus"
-                                 LostFocus="ChatInputTextBox_LostFocus"
-                                 DockPanel.Dock="Bottom"/>
+                                 LostFocus="ChatInputTextBox_LostFocus"/>
                     </DockPanel>
-                </DockPanel>
+                </Grid>
             </GroupBox>
 
             <!-- Incidents Panel -->
@@ -169,16 +174,16 @@
                 <DockPanel>
                     <!-- Usage Instructions -->
                     <TextBlock DockPanel.Dock="Top" 
-                               Text="Incidents are automatically detected when errors occur. Click 'Export' to save diagnostic artifacts for each incident."
+                               Text="Incidents are automatically detected when errors occur. Click 'Analyze' for AI analysis, then 'Export' to save diagnostic artifacts."
                                TextWrapping="Wrap"
                                Foreground="Gray"
                                FontSize="11"
                                Margin="0,0,0,8"
                                FontStyle="Italic"/>
                     
-                    <!-- AI Analyzing Indicator -->
+                    <!-- AI Analyzing Indicator (global) -->
                     <TextBlock DockPanel.Dock="Top"
-                               Text="🤖 AI is analyzing incidents in background..."
+                               Text="🤖 AI is analyzing..."
                                TextWrapping="Wrap"
                                Foreground="Blue"
                                FontSize="11"
@@ -194,51 +199,49 @@
                                 <DataTemplate>
                                     <Border BorderBrush="Gray" BorderThickness="1" 
                                             Padding="8" Margin="0,4" CornerRadius="4"
-                                            Background="#FFF5F5">
-                                        <StackPanel>
-                                            <!-- Incident Header -->
-                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                                <TextBlock Text="{Binding Entry.Level}" 
-                                                           FontWeight="Bold" 
-                                                           Foreground="Red"
-                                                           FontSize="12"/>
-                                                <TextBlock Text=" - " Margin="4,0,4,0"/>
-                                                <TextBlock Text="{Binding Entry.Source}" 
-                                                           FontWeight="Bold"
-                                                           Foreground="DarkBlue"/>
-                                                <TextBlock Text=" | " Margin="4,0,4,0"/>
-                                                <TextBlock Text="{Binding Entry.Timestamp, StringFormat={}{0:HH:mm:ss}}"
-                                                           Foreground="Gray"
-                                                           FontSize="10"/>
+                                            Background="{Binding IsResolved, Converter={StaticResource ResolvedBackgroundConverter}}">
+                                        <Expander IsExpanded="True" HorizontalContentAlignment="Stretch">
+                                            <Expander.Header>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Entry.Level}" FontWeight="Bold" Foreground="Red"/>
+                                                        <TextBlock Text=" - " Margin="4,0"/>
+                                                        <TextBlock Text="{Binding Entry.Source}" FontWeight="Bold" Foreground="DarkBlue"/>
+                                                        <TextBlock Text=" | " Margin="4,0"/>
+                                                        <TextBlock Text="{Binding Entry.Timestamp, StringFormat={}{0:HH:mm:ss}}" Foreground="Gray"/>
+                                                        <TextBlock Text=" RESOLVED" FontWeight="Bold" Foreground="Green" Margin="8,0,0,0"
+                                                                   Visibility="{Binding IsResolved, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                                    </StackPanel>
+                                                    <Button Grid.Column="1" Content="Remove" Padding="6,2" Margin="8,0,0,0"
+                                                            Command="{Binding DataContext.RemoveIncidentCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding}"/>
+                                                </Grid>
+                                            </Expander.Header>
+                                            <StackPanel Margin="0,8,0,0">
+                                                <TextBlock Text="{Binding Entry.Message}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                                                <TextBlock Text="{Binding Entry.SensorName}" Foreground="Blue"
+                                                           Visibility="{Binding Entry.SensorName, Converter={StaticResource StringToVisibilityConverter}}"/>
+                                                <Border BorderBrush="LightBlue" BorderThickness="1" Padding="6" Margin="0,4" CornerRadius="3" Background="#F0F8FF">
+                                                    <StackPanel>
+                                                        <TextBlock Text="AI Analysis:" FontWeight="Bold" Margin="0,0,0,2"/>
+                                                        <TextBlock Text="{Binding AiSummary}" TextWrapping="Wrap" LineHeight="16"/>
+                                                    </StackPanel>
+                                                </Border>
+                                                <WrapPanel Margin="0,4,0,0">
+                                                    <Button Content="Analyze" Command="{Binding DataContext.AnalyzeIncidentCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding}" Margin="0,0,5,0"
+                                                            IsEnabled="{Binding DataContext.IsAnalyzing, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BooleanInverterConverter}}"/>
+                                                    <Button Content="{Binding ResolutionActionText}" Command="{Binding DataContext.SetIncidentResolvedCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding}" Margin="0,0,5,0"/>
+                                                    <Button Content="Export ZIP" Command="{Binding DataContext.ExportArtifactCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding}"/>
+                                                </WrapPanel>
                                             </StackPanel>
-                                            
-                                            <!-- Incident Details -->
-                                            <TextBlock Text="{Binding Entry.Message}" 
-                                                       TextWrapping="Wrap"
-                                                       Margin="0,0,0,4"/>
-                                            <TextBlock Text="{Binding Entry.SensorName}" 
-                                                       Foreground="Blue"
-                                                       Visibility="{Binding Entry.SensorName, Converter={StaticResource StringToVisibilityConverter}}"/>
-                                            
-                                            <!-- AI Analysis -->
-                                            <Border BorderBrush="LightBlue" BorderThickness="1" 
-                                                    Padding="6" Margin="0,4,0,4" CornerRadius="3"
-                                                    Background="#F0F8FF">
-                                                <StackPanel>
-                                                    <TextBlock Text="AI Analysis:" FontWeight="Bold" Margin="0,0,0,2"/>
-                                                    <TextBlock Text="{Binding AiSummary}" 
-                                                               TextWrapping="Wrap"
-                                                               LineHeight="16"/>
-                                                </StackPanel>
-                                            </Border>
-                                            
-                                            <!-- Export Button -->
-                                            <Button Content="📥 Export Diagnostic Artifact"
-                                                    Command="{Binding DataContext.ExportArtifactCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    CommandParameter="{Binding}" 
-                                                    Margin="0,4,0,0"
-                                                    HorizontalAlignment="Stretch"/>
-                                        </StackPanel>
+                                        </Expander>
                                     </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>

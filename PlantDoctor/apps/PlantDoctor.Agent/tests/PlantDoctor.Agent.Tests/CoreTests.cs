@@ -66,6 +66,37 @@ public class LogEntryParserTests
     }
 }
 
+public class JsonlLogTailerTests
+{
+    [Fact]
+    public void ReadRecent_ReturnsEntriesWithinWindowFromActiveFile()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), $"plantdoctor-agent-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(folder);
+        var logPath = Path.Combine(folder, "plant-20260918.jsonl");
+        File.WriteAllLines(logPath,
+        [
+            "{\"timestamp\":\"2026-09-18T11:30:00Z\",\"level\":\"Info\",\"message\":\"old\"}",
+            "{\"timestamp\":\"2026-09-18T11:45:00Z\",\"level\":\"Warning\",\"message\":\"within window\"}",
+            "{\"timestamp\":\"2026-09-18T12:00:00Z\",\"level\":\"Error\",\"message\":\"latest\"}"
+        ]);
+
+        try
+        {
+            using var tailer = new JsonlLogTailer(folder);
+            tailer.Start();
+
+            var entries = tailer.ReadRecent(TimeSpan.FromMinutes(20));
+
+            entries.Select(entry => entry.Message).Should().Equal("within window", "latest");
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+}
+
 public class ArtifactWriterTests
 {
     [Fact]
@@ -119,6 +150,38 @@ public class ArtifactWriterTests
             using var stream = File.OpenRead(path);
             using var archive = new ZipArchive(stream);
             archive.Entries.Should().HaveCount(1);
+            archive.Entries[0].FullName.Should().Be("diagnostic-artifact.json");
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+
+    [Fact]
+    public async Task WriteZipAsync_IncludesLogsAndChat_WhenPresent()
+    {
+        var writer = new ArtifactWriter();
+        var artifact = new DiagnosticArtifact
+        {
+            RecentLogEntries =
+            [
+                new RecentLogEntry { Timestamp = DateTime.UtcNow, Message = "running" }
+            ],
+            OperatorChatTranscript =
+            [
+                new ChatMessage { Role = "operator", Message = "status?" }
+            ]
+        };
+        var path = Path.GetTempFileName() + ".zip";
+        try
+        {
+            await writer.WriteZipAsync(artifact, path);
+            using var stream = File.OpenRead(path);
+            using var archive = new ZipArchive(stream);
+            archive.Entries.Select(entry => entry.FullName).Should().BeEquivalentTo(
+                "diagnostic-artifact.json", "plant-last-20-minutes.jsonl", "chat-history.json");
         }
         finally
         {
@@ -143,6 +206,21 @@ public class PromptBuilderTests
     {
         var p = PromptBuilder.BuildChatPrompt("why?", Array.Empty<LogEntry>());
         p.Should().Contain("why?");
+    }
+
+    [Fact]
+    public void BuildChatPrompt_IncludesCompletePlantContext()
+    {
+        var logs = new[]
+        {
+            new LogEntry(DateTime.UtcNow, "Error", "Sensor", "Temperature", "2000 C", "OUT_OF_RANGE", "hot", "sensor stack")
+        };
+
+        var prompt = PromptBuilder.BuildChatPrompt(
+            "why?", logs, "operator: previous question", "PLANT-1", "OUT_OF_RANGE analysis");
+
+        prompt.Should().ContainAll("PLANT-1", "Temperature", "2000 C", "OUT_OF_RANGE", "sensor stack",
+            "previous question", "OUT_OF_RANGE analysis");
     }
 
     [Fact]

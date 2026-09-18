@@ -27,6 +27,8 @@ Thumbs.db
 
 # App output
 logs/
+!apps/PlantDoctor.Agent/src/PlantDoctor.Agent.Core/Logs/
+!apps/PlantDoctor.Agent/src/PlantDoctor.Agent.Core/Logs/*.cs
 artifacts/
 *.jsonl
 

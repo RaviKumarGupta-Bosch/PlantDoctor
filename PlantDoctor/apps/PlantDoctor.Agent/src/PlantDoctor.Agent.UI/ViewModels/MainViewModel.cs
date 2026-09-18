@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Threading;
 using System.Windows;
+using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
@@ -15,17 +16,19 @@ namespace PlantDoctor.Agent.UI.ViewModels;
 public partial class MainViewModel : ObservableObject
 {
     private const int BufferSize = 500;
+    private const int IncidentLimit = 200;
+    private static readonly TimeSpan AiRequestTimeout = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan ExportLogWindow = TimeSpan.FromMinutes(20);
     private readonly ILogTailer _tailer;
     private readonly IOllamaClient _ollama;
     private readonly IArtifactWriter _writer;
     private readonly Queue<LogEntry> _buffer = new();
     private readonly List<ChatSessionMessage> _sessionHistory = new();
-    private readonly HashSet<string> _analyzedIncidents = new();
-    private const int MaxSessionHistory = 50;
-    private int _incidentCounter;
+    private readonly HashSet<string> _incidentKeys = new();
 
     public ObservableCollection<LogEntry> LiveLog { get; } = new();
-    public ObservableCollection<LogEntry> FilteredLogs { get; } = new();
+    private readonly ICollectionView _filteredLogsView;
+    public ICollectionView FilteredLogsView => _filteredLogsView;
     public ObservableCollection<IncidentCardVm> Incidents { get; } = new();
     public ObservableCollection<ChatBubbleVm> Chat { get; } = new();
 
@@ -40,9 +43,38 @@ public partial class MainViewModel : ObservableObject
     public MainViewModel(ILogTailer tailer, IOllamaClient ollama, IArtifactWriter writer)
     {
         _tailer = tailer; _ollama = ollama; _writer = writer;
+        _filteredLogsView = new CollectionViewSource() { Source = LiveLog }.View;
+        _filteredLogsView.Filter = ApplyFilterPredicate;
+
         _tailer.EntryReceived += OnEntry;
         _tailer.Start();
         _ = CheckOllamaAsync();
+    }
+
+    private bool ApplyFilterPredicate(object item)
+    {
+        if (item is not LogEntry entry) return false;
+
+        if (!string.Equals(LogLevelFilter, "All Levels", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(entry.Level, LogLevelFilter, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // Apply text filter
+        if (!string.IsNullOrWhiteSpace(LogFilter))
+        {
+            var filter = LogFilter.Trim();
+            var matches = entry.Timestamp.ToString("yyyy-MM-dd HH:mm:ss").Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                entry.Message.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                entry.Level.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                entry.Source.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                (entry.SensorName?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (entry.Value?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (entry.ErrorCode?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (entry.StackTrace?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false);
+            return matches;
+        }
+
+        return true;
     }
 
     private async Task CheckOllamaAsync() =>
@@ -50,166 +82,137 @@ public partial class MainViewModel : ObservableObject
 
     private void OnEntry(object? _, LogEntry e)
     {
-        Application.Current.Dispatcher.Invoke(() =>
+        Application.Current.Dispatcher.BeginInvoke(() =>
         {
             _buffer.Enqueue(e);
             while (_buffer.Count > BufferSize) _buffer.Dequeue();
             LiveLog.Insert(0, e);
             while (LiveLog.Count > BufferSize) LiveLog.RemoveAt(LiveLog.Count - 1);
-            
-            // Add to filtered logs as well
-            FilteredLogs.Insert(0, e);
-            while (FilteredLogs.Count > BufferSize) FilteredLogs.RemoveAt(FilteredLogs.Count - 1);
-            
+
+            // CollectionView automatically filters - no need to rebuild FilteredLogs
+
+            // Create incident card for errors/warnings (without auto-analysis)
             if (e.Level is "Warning" or "Error" or "Critical")
-                _ = AnalyzeAsync(e);
+            {
+                var incidentKey = GetIncidentKey(e);
+                if (_incidentKeys.Add(incidentKey))
+                {
+                    var card = new IncidentCardVm(e, "⏳ Not analyzed yet — click Analyze");
+                    Incidents.Insert(0, card);
+                    while (Incidents.Count > IncidentLimit)
+                    {
+                        var oldest = Incidents[^1];
+                        Incidents.RemoveAt(Incidents.Count - 1);
+                        _incidentKeys.Remove(GetIncidentKey(oldest.Entry));
+                    }
+                }
+            }
         });
     }
 
-    partial void OnLogFilterChanged(string value)
-    {
-        ApplyFilters();
-    }
+    partial void OnLogFilterChanged(string value) => _filteredLogsView.Refresh();
 
-    partial void OnLogLevelFilterChanged(string value)
-    {
-        ApplyFilters();
-    }
-
-    private void ApplyFilters()
-    {
-        var filtered = LiveLog.AsEnumerable();
-        
-        // Apply level filter
-        if (LogLevelFilter != "All Levels")
-        {
-            filtered = filtered.Where(e => e.Level == LogLevelFilter);
-        }
-        
-        // Apply text filter
-        if (!string.IsNullOrWhiteSpace(LogFilter))
-        {
-            var filter = LogFilter.ToLower();
-            filtered = filtered.Where(e => 
-                e.Message.ToLower().Contains(filter) ||
-                e.Level.ToLower().Contains(filter) ||
-                e.Source.ToLower().Contains(filter) ||
-                (e.SensorName != null && e.SensorName.ToLower().Contains(filter)));
-        }
-        
-        // Rebuild filtered collection
-        FilteredLogs.Clear();
-        foreach (var entry in filtered)
-        {
-            FilteredLogs.Add(entry);
-        }
-    }
+    partial void OnLogLevelFilterChanged(string value) => _filteredLogsView.Refresh();
 
     [RelayCommand]
     private void RefreshLogs()
     {
-        ApplyFilters();
+        // CollectionView automatically refreshes when items change
+        _filteredLogsView.Refresh();
     }
 
-    private async Task AnalyzeAsync(LogEntry incident)
+    [RelayCommand]
+    private async Task AnalyzeIncidentAsync(IncidentCardVm? card)
     {
-        // Deduplication: skip if we've already analyzed this incident
-        var incidentKey = $"{incident.Timestamp:O}|{incident.Level}|{incident.Message}";
-        if (_analyzedIncidents.Contains(incidentKey))
-            return;
-        _analyzedIncidents.Add(incidentKey);
+        if (card is null) return;
 
         // Show loading state
         IsAnalyzing = true;
-        var incidentId = Interlocked.Increment(ref _incidentCounter);
-        var loadingCard = new IncidentCardVm(incident, "⏳ Analyzing...");
-        
-        Application.Current.Dispatcher.Invoke(() =>
-            Incidents.Insert(0, loadingCard));
+        card.SetAnalyzing(true);
+        card.SetAiSummary("Analysis in progress...");
 
-        // Run AI analysis in background with timeout
         try
         {
-            var prompt = PromptBuilder.BuildIncidentPrompt(incident, _buffer);
-            
-            // Use a task with timeout instead of waiting indefinitely
-            var analysisTask = _ollama.GenerateAsync(PromptBuilder.SystemPrompt, prompt);
-            var timeoutTask = Task.Delay(TimeSpan.FromSeconds(30));
-            
-            var completedTask = await Task.WhenAny(analysisTask, timeoutTask);
-            
-            if (completedTask == timeoutTask)
-            {
-                // Timeout - add placeholder
-                Application.Current.Dispatcher.Invoke(() =>
-                {
-                    var timeoutCard = new IncidentCardVm(incident, "⚠️ Analysis timed out — AI may be busy. Try again later.");
-                    var idx = Incidents.IndexOf(loadingCard);
-                    if (idx >= 0) Incidents[idx] = timeoutCard;
-                });
-                return;
-            }
-            
-            var summary = analysisTask.Result;
-            
-            // Update the incident card with AI analysis
-            Application.Current.Dispatcher.Invoke(() =>
-            {
-                var newCard = new IncidentCardVm(incident, summary);
-                var idx = Incidents.IndexOf(loadingCard);
-                if (idx >= 0) Incidents[idx] = newCard;
-            });
+            var prompt = PromptBuilder.BuildIncidentPrompt(card.Entry, ReadPlantLogs());
+            using var timeout = new CancellationTokenSource(AiRequestTimeout);
+            var summary = await _ollama.GenerateAsync(PromptBuilder.SystemPrompt, prompt, timeout.Token);
+            card.SetAiSummary(summary);
+        }
+        catch (OperationCanceledException)
+        {
+            card.SetAiSummary("Analysis timed out after 2 minutes. The AI request was cancelled; click Analyze to retry.");
         }
         catch (Exception ex)
         {
-            // Handle any exceptions and show error
-            Application.Current.Dispatcher.Invoke(() =>
-            {
-                var errorCard = new IncidentCardVm(incident, $"❌ Analysis failed: {ex.Message}");
-                var idx = Incidents.IndexOf(loadingCard);
-                if (idx >= 0) Incidents[idx] = errorCard;
-            });
+            card.SetAiSummary($"Analysis failed: {ex.Message}");
         }
         finally
         {
+            card.SetAnalyzing(false);
             IsAnalyzing = false;
         }
     }
 
     [RelayCommand]
+    private void SetIncidentResolved(IncidentCardVm? card)
+    {
+        if (card is null) return;
+        card.SetResolved(!card.IsResolved);
+    }
+
+    [RelayCommand]
+    private void RemoveIncident(IncidentCardVm? card)
+    {
+        if (card is null) return;
+        if (Incidents.Remove(card))
+            _incidentKeys.Remove(GetIncidentKey(card.Entry));
+    }
+
+    private static string GetIncidentKey(LogEntry entry) =>
+        $"{entry.Timestamp:O}|{entry.Level}|{entry.Message}";
+
+    [RelayCommand]
     private async Task SendChat()
     {
         if (string.IsNullOrWhiteSpace(ChatInput) || IsProcessing) return;
-        
+
         IsProcessing = true;
         var user = ChatInput.Trim();
         ChatInput = string.Empty;
-        
+
         // Add user message to chat and session history
         Chat.Add(new ChatBubbleVm("operator", user));
         _sessionHistory.Add(new ChatSessionMessage { Role = "operator", Message = user });
-        
-        // Build prompt with session history (last 10 messages for context)
-        var recentHistory = _sessionHistory.TakeLast(10).Select(m => $"{m.Role}: {m.Message}").ToList();
-        var historyContext = recentHistory.Any() ? $"\n\nRecent conversation:\n{string.Join("\n", recentHistory)}" : "";
-        var prompt = PromptBuilder.BuildChatPrompt(user, _buffer, historyContext);
-        
+
+        var historyContext = string.Join("\n", _sessionHistory
+            .Take(Math.Max(0, _sessionHistory.Count - 1))
+            .Select(message => $"{message.Role}: {message.Message}"));
+        var incidentContext = string.Join("\n", Incidents.Select(card =>
+            $"{card.Entry.Timestamp:o} [{card.Entry.Level}] ({card.Entry.Source}) " +
+            $"ErrorCode={card.Entry.ErrorCode ?? "none"} Message={card.Entry.Message} AI={card.AiSummary}"));
+        var prompt = PromptBuilder.BuildChatPrompt(
+            user, ReadPlantLogs(), historyContext, PlantId, incidentContext);
+        var pending = new ChatBubbleVm("assistant", "Response generation in progress...", true);
+        Chat.Add(pending);
+
         try
         {
-            var answer = await _ollama.GenerateAsync(PromptBuilder.SystemPrompt, prompt);
-            Chat.Add(new ChatBubbleVm("assistant", answer));
+            using var timeout = new CancellationTokenSource(AiRequestTimeout);
+            var answer = await _ollama.GenerateAsync(PromptBuilder.SystemPrompt, prompt, timeout.Token);
+            pending.Text = answer;
             _sessionHistory.Add(new ChatSessionMessage { Role = "assistant", Message = answer });
-            
-            // Trim session history to max size
-            while (_sessionHistory.Count > MaxSessionHistory)
-                _sessionHistory.RemoveAt(0);
+        }
+        catch (OperationCanceledException)
+        {
+            pending.Text = "AI response timed out after 2 minutes. The request was cancelled; please try again.";
         }
         catch (Exception ex)
         {
-            Chat.Add(new ChatBubbleVm("assistant", $"(error: {ex.Message})"));
+            pending.Text = $"AI response failed: {ex.Message}";
         }
         finally
         {
+            pending.IsInProgress = false;
             IsProcessing = false;
         }
     }
@@ -224,58 +227,21 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task ExportChat()
     {
-        if (!Chat.Any())
-        {
-            MessageBox.Show("No chat history to export.", "Export Chat", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-
         var dlg = new SaveFileDialog
         {
-            FileName = $"chat-session-{PlantId}-{DateTime.UtcNow:yyyyMMddHHmmss}.txt",
-            Filter = "Text (*.txt)|*.txt|JSON (*.json)|*.json"
+            FileName = $"plant-agent-artifact-{PlantId}-{DateTime.UtcNow:yyyyMMdd-HHmmss}.zip",
+            Filter = "ZIP Archive (*.zip)|*.zip",
+            DefaultExt = ".zip"
         };
 
         if (dlg.ShowDialog() != true) return;
 
         try
         {
-            if (dlg.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-            {
-                var chatMessages = Chat.Select(c => new Core.Artifact.ChatMessage
-                {
-                    Role = c.Role,
-                    Message = c.Text,
-                    TimestampUtc = c.TimestampUtc
-                }).ToList();
-
-                var json = System.Text.Json.JsonSerializer.Serialize(chatMessages, new System.Text.Json.JsonSerializerOptions
-                {
-                    WriteIndented = true
-                });
-                await File.WriteAllTextAsync(dlg.FileName, json);
-            }
-            else
-            {
-                var sb = new System.Text.StringBuilder();
-                sb.AppendLine($"PlantDoctor Agent - Chat Session");
-                sb.AppendLine($"Plant ID: {PlantId}");
-                sb.AppendLine($"Exported: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss UTC}");
-                sb.AppendLine(new string('=', 60));
-                sb.AppendLine();
-
-                foreach (var bubble in Chat)
-                {
-                    sb.AppendLine($"[{bubble.Role.ToUpper()}] {bubble.TimestampUtc:HH:mm:ss}");
-                    sb.AppendLine(bubble.Text);
-                    sb.AppendLine(new string('-', 40));
-                    sb.AppendLine();
-                }
-
-                await File.WriteAllTextAsync(dlg.FileName, sb.ToString());
-            }
-
-            MessageBox.Show($"Chat exported to:\n{dlg.FileName}", "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+            var artifact = BuildArtifact(Incidents.FirstOrDefault(), ReadPlantLogs());
+            await _writer.WriteZipAsync(artifact, dlg.FileName);
+            MessageBox.Show($"Logs from the last 20 minutes and available chat history were exported to:\n{dlg.FileName}",
+                "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
@@ -287,64 +253,118 @@ public partial class MainViewModel : ObservableObject
     private async Task ExportArtifact(IncidentCardVm? card)
     {
         if (card is null) return;
-        var artifact = BuildArtifact(card);
+        var artifact = BuildArtifact(card, ReadPlantLogs());
         var dlg = new SaveFileDialog
         {
-            FileName = $"diagnostic-artifact-{PlantId}-{DateTime.UtcNow:yyyyMMddHHmmss}.json",
-            Filter = "JSON (*.json)|*.json|ZIP (*.zip)|*.zip"
+            FileName = $"diagnostic-artifact-{PlantId}-{DateTime.UtcNow:yyyyMMddHHmmss}.zip",
+            Filter = "ZIP Archive (*.zip)|*.zip"
         };
         if (dlg.ShowDialog() != true) return;
-        if (dlg.FileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
-            await _writer.WriteZipAsync(artifact, dlg.FileName);
-        else
-            await _writer.WriteJsonAsync(artifact, dlg.FileName);
+        await _writer.WriteZipAsync(artifact, dlg.FileName);
         MessageBox.Show($"Saved: {dlg.FileName}\n\nTransfer via USB, email, or file share to the PlantDoctor web portal.",
             "Artifact exported");
     }
 
-    private DiagnosticArtifact BuildArtifact(IncidentCardVm card) => new()
+    private IReadOnlyList<LogEntry> ReadPlantLogs()
     {
-        PlantId = PlantId,
-        Incident = new IncidentInfo
+        try
         {
-            DetectedAtUtc = card.Entry.Timestamp,
-            Severity = card.Entry.Level,
-            Source = card.Entry.Source,
-            ErrorCode = card.Entry.ErrorCode,
-            PrimaryMessage = card.Entry.Message
-        },
-        RecentLogEntries = _buffer.TakeLast(50).Select(e => new RecentLogEntry
+            return _tailer.ReadRecent(ExportLogWindow);
+        }
+        catch (IOException)
         {
-            Timestamp = e.Timestamp,
-            Level = e.Level,
-            Source = e.Source,
-            SensorName = e.SensorName,
-            Value = e.Value,
-            ErrorCode = e.ErrorCode,
-            Message = e.Message,
-            StackTrace = e.StackTrace
-        }).ToList(),
-        AiAnalysis = new AiAnalysis
+            return _buffer.ToList();
+        }
+        catch (UnauthorizedAccessException)
         {
-            ModelUsed = "mistral:latest",
-            Summary = card.AiSummary,
-            SuspectedRootCause = card.AiSummary,
-            Confidence = "Medium"
-        },
-        OperatorChatTranscript = Chat.Select(c => new Core.Artifact.ChatMessage
-        { Role = c.Role, Message = c.Text, TimestampUtc = c.TimestampUtc }).ToList()
-    };
+            return _buffer.ToList();
+        }
+    }
+
+    private DiagnosticArtifact BuildArtifact(IncidentCardVm? card, IReadOnlyList<LogEntry> logs)
+    {
+        var contextEntry = card?.Entry ?? logs.LastOrDefault();
+        return new DiagnosticArtifact
+        {
+            PlantId = PlantId,
+            Incident = new IncidentInfo
+            {
+                DetectedAtUtc = contextEntry?.Timestamp ?? DateTime.UtcNow,
+                Severity = card?.Entry.Level ?? "Warning",
+                Source = contextEntry?.Source ?? "Application",
+                ErrorCode = contextEntry?.ErrorCode,
+                PrimaryMessage = contextEntry?.Message ?? "Plant context export"
+            },
+            RecentLogEntries = logs.Select(e => new RecentLogEntry
+            {
+                Timestamp = e.Timestamp,
+                Level = e.Level,
+                Source = e.Source,
+                SensorName = e.SensorName,
+                Value = e.Value,
+                ErrorCode = e.ErrorCode,
+                Message = e.Message,
+                StackTrace = e.StackTrace
+            }).ToList(),
+            AiAnalysis = new AiAnalysis
+            {
+                ModelUsed = "mistral:latest",
+                Summary = card?.AiSummary ?? string.Empty,
+                SuspectedRootCause = card?.AiSummary ?? string.Empty,
+                Confidence = card is null ? "Low" : "Medium"
+            },
+            OperatorChatTranscript = Chat
+                .Where(message => !message.IsInProgress)
+                .Select(c => new Core.Artifact.ChatMessage
+                { Role = c.Role, Message = c.Text, TimestampUtc = c.TimestampUtc }).ToList()
+        };
+    }
 }
 
-public sealed record IncidentCardVm(LogEntry Entry, string AiSummary);
-public sealed record ChatBubbleVm(string Role, string Text)
+public sealed partial class IncidentCardVm : ObservableObject
 {
+    public LogEntry Entry { get; }
+    public string ResolutionActionText => IsResolved ? "Reopen" : "Set as Resolved";
+
+    [ObservableProperty] private string _aiSummary;
+    [ObservableProperty] private bool _isResolved;
+    [ObservableProperty] private bool _isAnalyzing;
+
+    public IncidentCardVm(LogEntry entry, string aiSummary)
+    {
+        Entry = entry;
+        _aiSummary = aiSummary;
+        _isResolved = false;
+        _isAnalyzing = false;
+    }
+
+    public void SetAiSummary(string summary) => AiSummary = summary;
+    public void SetResolved(bool resolved)
+    {
+        IsResolved = resolved;
+        OnPropertyChanged(nameof(ResolutionActionText));
+    }
+    public void SetAnalyzing(bool analyzing) => IsAnalyzing = analyzing;
+}
+
+public sealed partial class ChatBubbleVm : ObservableObject
+{
+    public string Role { get; }
     public DateTime TimestampUtc { get; } = DateTime.UtcNow;
+
+    [ObservableProperty] private string _text;
+    [ObservableProperty] private bool _isInProgress;
+
+    public ChatBubbleVm(string role, string text, bool isInProgress = false)
+    {
+        Role = role;
+        _text = text;
+        _isInProgress = isInProgress;
+    }
 }
 
 public sealed record ChatSessionMessage
 {
     public string Role { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
-    public DateTime TimestampUtc { get; set; } = DateTime.UtcNow;
 }

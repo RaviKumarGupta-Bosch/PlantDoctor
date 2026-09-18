@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Threading;
 using System.Windows;
+using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
@@ -25,7 +26,8 @@ public partial class MainViewModel : ObservableObject
     private int _incidentCounter;
 
     public ObservableCollection<LogEntry> LiveLog { get; } = new();
-    public ObservableCollection<LogEntry> FilteredLogs { get; } = new();
+    private readonly ICollectionView _filteredLogsView;
+    public ICollectionView FilteredLogsView => _filteredLogsView;
     public ObservableCollection<IncidentCardVm> Incidents { get; } = new();
     public ObservableCollection<ChatBubbleVm> Chat { get; } = new();
 
@@ -42,7 +44,34 @@ public partial class MainViewModel : ObservableObject
         _tailer = tailer; _ollama = ollama; _writer = writer;
         _tailer.EntryReceived += OnEntry;
         _tailer.Start();
+        
+        // Set up efficient CollectionView for live filtering
+        _filteredLogsView = new CollectionViewSource() { Source = LiveLog }.View;
+        _filteredLogsView.Filter = ApplyFilterPredicate;
+        
         _ = CheckOllamaAsync();
+    }
+
+    private bool ApplyFilterPredicate(object item)
+    {
+        if (item is not LogEntry entry) return false;
+        
+        // Apply level filter
+        if (LogLevelFilter != "All Levels" && entry.Level != LogLevelFilter)
+            return false;
+        
+        // Apply text filter
+        if (!string.IsNullOrWhiteSpace(LogFilter))
+        {
+            var filter = LogFilter.ToLower();
+            var matches = entry.Message.ToLower().Contains(filter) ||
+                entry.Level.ToLower().Contains(filter) ||
+                entry.Source.ToLower().Contains(filter) ||
+                (entry.SensorName != null && entry.SensorName.ToLower().Contains(filter));
+            return matches;
+        }
+        
+        return true;
     }
 
     private async Task CheckOllamaAsync() =>
@@ -57,82 +86,46 @@ public partial class MainViewModel : ObservableObject
             LiveLog.Insert(0, e);
             while (LiveLog.Count > BufferSize) LiveLog.RemoveAt(LiveLog.Count - 1);
             
-            // Add to filtered logs as well
-            FilteredLogs.Insert(0, e);
-            while (FilteredLogs.Count > BufferSize) FilteredLogs.RemoveAt(FilteredLogs.Count - 1);
+            // CollectionView automatically filters - no need to rebuild FilteredLogs
             
+            // Create incident card for errors/warnings (without auto-analysis)
             if (e.Level is "Warning" or "Error" or "Critical")
-                _ = AnalyzeAsync(e);
+            {
+                var incidentKey = $"{e.Timestamp:O}|{e.Level}|{e.Message}";
+                if (!_analyzedIncidents.Contains(incidentKey))
+                {
+                    _analyzedIncidents.Add(incidentKey);
+                    var card = new IncidentCardVm(e, "⏳ Not analyzed yet — click Analyze");
+                    Incidents.Insert(0, card);
+                }
+            }
         });
-    }
-
-    partial void OnLogFilterChanged(string value)
-    {
-        ApplyFilters();
-    }
-
-    partial void OnLogLevelFilterChanged(string value)
-    {
-        ApplyFilters();
-    }
-
-    private void ApplyFilters()
-    {
-        var filtered = LiveLog.AsEnumerable();
-        
-        // Apply level filter
-        if (LogLevelFilter != "All Levels")
-        {
-            filtered = filtered.Where(e => e.Level == LogLevelFilter);
-        }
-        
-        // Apply text filter
-        if (!string.IsNullOrWhiteSpace(LogFilter))
-        {
-            var filter = LogFilter.ToLower();
-            filtered = filtered.Where(e => 
-                e.Message.ToLower().Contains(filter) ||
-                e.Level.ToLower().Contains(filter) ||
-                e.Source.ToLower().Contains(filter) ||
-                (e.SensorName != null && e.SensorName.ToLower().Contains(filter)));
-        }
-        
-        // Rebuild filtered collection
-        FilteredLogs.Clear();
-        foreach (var entry in filtered)
-        {
-            FilteredLogs.Add(entry);
-        }
     }
 
     [RelayCommand]
     private void RefreshLogs()
     {
-        ApplyFilters();
+        // CollectionView automatically refreshes when items change
+        _filteredLogsView.Refresh();
     }
 
-    private async Task AnalyzeAsync(LogEntry incident)
+    [RelayCommand]
+    private async Task AnalyzeIncidentAsync(IncidentCardVm? card)
     {
-        // Deduplication: skip if we've already analyzed this incident
-        var incidentKey = $"{incident.Timestamp:O}|{incident.Level}|{incident.Message}";
-        if (_analyzedIncidents.Contains(incidentKey))
+        if (card is null) return;
+        
+        // If already analyzed, skip
+        if (!string.IsNullOrEmpty(card.AiSummary) && card.AiSummary != "⏳ Not analyzed yet — click Analyze")
             return;
-        _analyzedIncidents.Add(incidentKey);
-
+        
         // Show loading state
         IsAnalyzing = true;
-        var incidentId = Interlocked.Increment(ref _incidentCounter);
-        var loadingCard = new IncidentCardVm(incident, "⏳ Analyzing...");
+        card.SetAnalyzing(true);
         
-        Application.Current.Dispatcher.Invoke(() =>
-            Incidents.Insert(0, loadingCard));
-
-        // Run AI analysis in background with timeout
         try
         {
-            var prompt = PromptBuilder.BuildIncidentPrompt(incident, _buffer);
+            var prompt = PromptBuilder.BuildIncidentPrompt(card.Entry, _buffer);
             
-            // Use a task with timeout instead of waiting indefinitely
             var analysisTask = _ollama.GenerateAsync(PromptBuilder.SystemPrompt, prompt);
             var timeoutTask = Task.Delay(TimeSpan.FromSeconds(30));
             
@@ -140,40 +133,31 @@ public partial class MainViewModel : ObservableObject
             
             if (completedTask == timeoutTask)
             {
-                // Timeout - add placeholder
-                Application.Current.Dispatcher.Invoke(() =>
-                {
-                    var timeoutCard = new IncidentCardVm(incident, "⚠️ Analysis timed out — AI may be busy. Try again later.");
-                    var idx = Incidents.IndexOf(loadingCard);
-                    if (idx >= 0) Incidents[idx] = timeoutCard;
-                });
+                card.SetAiSummary("⚠️ Analysis timed out — AI may be busy. Try again later.");
+                card.SetAnalyzing(false);
                 return;
             }
             
-            var summary = analysisTask.Result;
-            
-            // Update the incident card with AI analysis
-            Application.Current.Dispatcher.Invoke(() =>
-            {
-                var newCard = new IncidentCardVm(incident, summary);
-                var idx = Incidents.IndexOf(loadingCard);
-                if (idx >= 0) Incidents[idx] = newCard;
-            });
+            var summary = await analysisTask;
+            card.SetAiSummary(summary);
+            card.SetAnalyzing(false);
         }
         catch (Exception ex)
         {
-            // Handle any exceptions and show error
-            Application.Current.Dispatcher.Invoke(() =>
-            {
-                var errorCard = new IncidentCardVm(incident, $"❌ Analysis failed: {ex.Message}");
-                var idx = Incidents.IndexOf(loadingCard);
-                if (idx >= 0) Incidents[idx] = errorCard;
-            });
+            card.SetAiSummary($"❌ Analysis failed: {ex.Message}");
+            card.SetAnalyzing(false);
         }
         finally
         {
             IsAnalyzing = false;
         }
+    }
+
+    [RelayCommand]
+    private void SetIncidentResolved(IncidentCardVm? card)
+    {
+        if (card is null) return;
+        card.SetResolved(!card.IsResolved);
     }
 
     [RelayCommand]
@@ -290,14 +274,11 @@ public partial class MainViewModel : ObservableObject
         var artifact = BuildArtifact(card);
         var dlg = new SaveFileDialog
         {
-            FileName = $"diagnostic-artifact-{PlantId}-{DateTime.UtcNow:yyyyMMddHHmmss}.json",
-            Filter = "JSON (*.json)|*.json|ZIP (*.zip)|*.zip"
+            FileName = $"diagnostic-artifact-{PlantId}-{DateTime.UtcNow:yyyyMMddHHmmss}.zip",
+            Filter = "ZIP Archive (*.zip)|*.zip"
         };
         if (dlg.ShowDialog() != true) return;
-        if (dlg.FileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
-            await _writer.WriteZipAsync(artifact, dlg.FileName);
-        else
-            await _writer.WriteJsonAsync(artifact, dlg.FileName);
+        await _writer.WriteZipAsync(artifact, dlg.FileName);
         MessageBox.Show($"Saved: {dlg.FileName}\n\nTransfer via USB, email, or file share to the PlantDoctor web portal.",
             "Artifact exported");
     }
@@ -336,7 +317,27 @@ public partial class MainViewModel : ObservableObject
     };
 }
 
-public sealed record IncidentCardVm(LogEntry Entry, string AiSummary);
+public sealed class IncidentCardVm : ObservableObject
+{
+    public LogEntry Entry { get; }
+    
+    [ObservableProperty] private string _aiSummary;
+    [ObservableProperty] private bool _isResolved;
+    [ObservableProperty] private bool _isAnalyzing;
+
+    public IncidentCardVm(LogEntry entry, string aiSummary)
+    {
+        Entry = entry;
+        _aiSummary = aiSummary;
+        _isResolved = false;
+        _isAnalyzing = false;
+    }
+
+    public void SetAiSummary(string summary) => AiSummary = summary;
+    public void SetResolved(bool resolved) => IsResolved = resolved;
+    public void SetAnalyzing(bool analyzing) => IsAnalyzing = analyzing;
+}
+
 public sealed record ChatBubbleVm(string Role, string Text)
 {
     public DateTime TimestampUtc { get; } = DateTime.UtcNow;
@@ -346,5 +347,4 @@ public sealed record ChatSessionMessage
 {
     public string Role { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
-    public DateTime TimestampUtc { get; set; } = DateTime.UtcNow;
 }

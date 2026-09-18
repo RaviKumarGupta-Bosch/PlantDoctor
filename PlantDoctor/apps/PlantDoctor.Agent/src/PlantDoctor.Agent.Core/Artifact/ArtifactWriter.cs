@@ -17,6 +17,11 @@ public sealed class ArtifactWriter : IArtifactWriter
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
+    private static readonly JsonSerializerOptions CompactOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
     public async Task WriteJsonAsync(DiagnosticArtifact a, string filePath, CancellationToken ct = default)
     {
         await using var fs = File.Create(filePath);
@@ -27,8 +32,30 @@ public sealed class ArtifactWriter : IArtifactWriter
     {
         await using var fs = File.Create(zipPath);
         using var zip = new ZipArchive(fs, ZipArchiveMode.Create);
-        var entry = zip.CreateEntry($"{Path.GetFileNameWithoutExtension(zipPath)}.json");
-        await using var es = entry.Open();
-        await JsonSerializer.SerializeAsync(es, a, Options, ct);
+
+        var artifactEntry = zip.CreateEntry("diagnostic-artifact.json");
+        await using (var artifactStream = artifactEntry.Open())
+        {
+            await JsonSerializer.SerializeAsync(artifactStream, a, Options, ct);
+        }
+
+        if (a.RecentLogEntries.Count > 0)
+        {
+            var logEntry = zip.CreateEntry("plant-last-20-minutes.jsonl");
+            await using var logStream = logEntry.Open();
+            await using var writer = new StreamWriter(logStream);
+            foreach (var log in a.RecentLogEntries)
+            {
+                ct.ThrowIfCancellationRequested();
+                await writer.WriteLineAsync(JsonSerializer.Serialize(log, CompactOptions));
+            }
+        }
+
+        if (a.OperatorChatTranscript.Count > 0)
+        {
+            var chatEntry = zip.CreateEntry("chat-history.json");
+            await using var chatStream = chatEntry.Open();
+            await JsonSerializer.SerializeAsync(chatStream, a.OperatorChatTranscript, Options, ct);
+        }
     }
 }

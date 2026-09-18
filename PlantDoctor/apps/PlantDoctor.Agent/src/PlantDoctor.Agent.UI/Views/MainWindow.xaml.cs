@@ -8,10 +8,15 @@ namespace PlantDoctor.Agent.UI.Views;
 
 public partial class MainWindow : Window
 {
+    private ListBox? _chatListBox;
+
     public MainWindow()
     {
         InitializeComponent();
         DataContext = App.Host!.Services.GetRequiredService<MainViewModel>();
+
+        // Get reference to chat ListBox for auto-scroll
+        _chatListBox = FindName("ChatListBox") as ListBox;
     }
 
     private void ChatTextBox_KeyDown(object sender, KeyEventArgs e)
@@ -24,26 +29,6 @@ public partial class MainWindow : Window
                 viewModel.SendChatCommand.Execute(null);
                 e.Handled = true;
             }
-        }
-    }
-
-    private void FilterTextBox_GotFocus(object sender, RoutedEventArgs e)
-    {
-        var textBox = (TextBox)sender;
-        if (textBox.Text == "Search logs...")
-        {
-            textBox.Text = string.Empty;
-            textBox.Foreground = System.Windows.Media.Brushes.Black;
-        }
-    }
-
-    private void FilterTextBox_LostFocus(object sender, RoutedEventArgs e)
-    {
-        var textBox = (TextBox)sender;
-        if (string.IsNullOrWhiteSpace(textBox.Text))
-        {
-            textBox.Text = "Search logs...";
-            textBox.Foreground = System.Windows.Media.Brushes.Gray;
         }
     }
 
@@ -64,6 +49,16 @@ public partial class MainWindow : Window
         {
             textBox.Text = "Type your message... (Ctrl+Enter to send)";
             textBox.Foreground = System.Windows.Media.Brushes.Gray;
+        }
+    }
+
+    private void ChatScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        // Auto-scroll to bottom when new messages are added
+        if (e.ExtentHeightChange != 0)
+        {
+            var scrollViewer = e.Source as ScrollViewer;
+            scrollViewer?.ScrollToBottom();
         }
     }
 }
