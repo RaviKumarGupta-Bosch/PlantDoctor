@@ -283,102 +283,285 @@ def send_to_sap_btp(plant_doc_data: dict, issue_id: str = None) -> tuple[bool, s
         return False, f"❌ Error: {str(e)}"
 
 
-st.set_page_config(page_title="PlantDoctor DevPortal", page_icon="🌿", layout="wide")
-st.title("🌿 PlantDoctor DevPortal")
-st.caption("Diagnose plant issues with AI analysis and route actions to SAP BTP workflows.")
-
-# Display active Gemini model
-col1, col2, col3 = st.columns([3, 1, 1])
-with col3:
-    st.caption(f"🤖 Model: `{GEMINI_MODEL}`")
-
-prompt = load_system_prompt()
-
-# Create tabs for different input methods
-tab1, tab2 = st.tabs(["📝 Manual Analysis", "📁 Upload Report (ZIP)"])
+st.set_page_config(
+    page_title="PlantDoctor DevPortal", 
+    page_icon="🌿", 
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
 # ============================================================================
-# TAB 1: Manual Input Mode
+# SAP BLUE THEME & STYLING
 # ============================================================================
-with tab1:
-    st.subheader("Manual Plant Diagnostics")
+st.markdown("""
+<style>
+    /* SAP Blue Theme */
+    :root {
+        --sap-blue-primary: #0066CC;
+        --sap-blue-dark: #003A7A;
+        --sap-blue-light: #E8F1FC;
+        --plant-green: #2D5016;
+    }
     
-    with st.form("diagnostic_form"):
-        plant_name = st.text_input("Plant / asset name", value="Greenhouse A1")
-        issue_summary = st.text_area(
-            "Issue summary",
-            value="Leaves are yellowing and the soil is dry despite recent watering.",
-            height=180,
-        )
-        submitted = st.form_submit_button("🔍 Analyze", use_container_width=True)
+    /* Main container */
+    .main {
+        background: linear-gradient(135deg, #f5f7fa 0%, #E8F1FC 100%);
+    }
+    
+    /* Header styling */
+    h1 {
+        color: #0066CC;
+        border-bottom: 3px solid #0066CC;
+        padding-bottom: 10px;
+        margin-bottom: 5px;
+    }
+    
+    h2 {
+        color: #003A7A;
+    }
+    
+    /* Chat container */
+    .chat-container {
+        background: white;
+        border: 1px solid #0066CC;
+        border-radius: 8px;
+        padding: 15px;
+        margin: 10px 0;
+    }
+    
+    /* Input area */
+    .stTextArea textarea {
+        border: 2px solid #0066CC !important;
+        border-radius: 6px !important;
+    }
+    
+    .stFileUploader {
+        border: 2px dashed #0066CC !important;
+        border-radius: 6px !important;
+        padding: 20px !important;
+    }
+    
+    /* Buttons */
+    .stButton > button {
+        background-color: #0066CC !important;
+        color: white !important;
+        border-radius: 6px !important;
+        font-weight: 600 !important;
+        border: none !important;
+    }
+    
+    .stButton > button:hover {
+        background-color: #003A7A !important;
+    }
+    
+    /* Info boxes */
+    .stInfo {
+        background-color: #E8F1FC !important;
+        border-left: 4px solid #0066CC !important;
+        border-radius: 6px !important;
+    }
+    
+    .stSuccess {
+        background-color: #E8F5E9 !important;
+        border-left: 4px solid #4CAF50 !important;
+    }
+    
+    .stWarning {
+        background-color: #FFF3E0 !important;
+        border-left: 4px solid #FF9800 !important;
+    }
+    
+    .stError {
+        background-color: #FFEBEE !important;
+        border-left: 4px solid #F44336 !important;
+    }
+    
+    /* Expander */
+    .streamlit-expanderHeader {
+        background-color: #E8F1FC;
+        border-left: 4px solid #0066CC;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-    if submitted:
-        user_message = f"Plant: {plant_name}\nIssue summary: {issue_summary}"
+# ============================================================================
+# INITIALIZE SESSION STATE
+# ============================================================================
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "zip_contents" not in st.session_state:
+    st.session_state.zip_contents = None
+if "current_analysis" not in st.session_state:
+    st.session_state.current_analysis = None
+if "current_summary" not in st.session_state:
+    st.session_state.current_summary = None
+if "context_data" not in st.session_state:
+    st.session_state.context_data = {}
 
-        if build_client() is not None and types is not None:
-            with st.spinner("Analyzing plant health..."):
-                client = build_client()
-                response = client.models.generate_content(
-                    model=GEMINI_MODEL,
-                    contents=user_message,
-                    config=types.GenerateContentConfig(system_instruction=prompt),
-                )
-                answer = getattr(response, "text", None) or str(response)
+# ============================================================================
+# HEADER WITH PLANT PICTURE
+# ============================================================================
+col1, col2 = st.columns([1, 4])
+
+with col1:
+    # Simple plant SVG icon
+    st.markdown("""
+    <svg width="80" height="80" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <!-- Pot -->
+        <path d="M 30 50 L 20 80 L 80 80 L 70 50 Z" fill="#D2691E" stroke="#8B4513" stroke-width="2"/>
+        <ellipse cx="50" cy="50" rx="20" ry="8" fill="#CD853F" stroke="#8B4513" stroke-width="2"/>
+        
+        <!-- Soil -->
+        <ellipse cx="50" cy="52" rx="18" ry="6" fill="#8B7355"/>
+        
+        <!-- Main stem -->
+        <path d="M 50 52 Q 50 30 45 15" stroke="#2D5016" stroke-width="3" fill="none" stroke-linecap="round"/>
+        
+        <!-- Left leaf -->
+        <path d="M 50 40 Q 35 35 30 25" stroke="#2D5016" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <path d="M 50 40 Q 40 28 35 18" stroke="#4CAF50" stroke-width="2" fill="none" stroke-linecap="round"/>
+        
+        <!-- Right leaf -->
+        <path d="M 50 40 Q 65 35 70 25" stroke="#2D5016" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <path d="M 50 40 Q 60 28 65 18" stroke="#4CAF50" stroke-width="2" fill="none" stroke-linecap="round"/>
+        
+        <!-- Top leaf -->
+        <path d="M 45 15 L 40 5" stroke="#4CAF50" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <path d="M 45 15 L 50 2" stroke="#66BB6A" stroke-width="2" fill="none" stroke-linecap="round"/>
+    </svg>
+    """, unsafe_allow_html=True)
+
+with col2:
+    st.title("🌿 PlantDoctor DevPortal")
+    st.caption("**Production Plant Diagnostics for SAP Enterprise**")
+    st.caption("🚀 AI-powered issue analysis and SAP BTP integration")
+
+st.markdown("---")
+
+# ============================================================================
+# MAIN UNIFIED CHAT INTERFACE
+# ============================================================================
+
+# Chat display area
+st.subheader("💬 Analysis Chat")
+chat_container = st.container()
+
+with chat_container:
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+# ============================================================================
+# INPUT SECTION
+# ============================================================================
+st.subheader("🔧 Start Analysis")
+
+# Option selection
+input_method = st.radio(
+    "How would you like to provide information?",
+    ["📝 Text Description", "📁 Upload ZIP File", "❓ Follow-up Question"],
+    horizontal=True
+)
+
+# Text input mode
+if input_method == "📝 Text Description":
+    plant_name = st.text_input(
+        "Plant / Asset Name",
+        value="Production Plant 1",
+        help="e.g., Greenhouse A1, Assembly Line B2, etc."
+    )
+    
+    issue_description = st.text_area(
+        "Describe the issue or problem",
+        value="Describe what's happening with your plant or equipment...",
+        height=100,
+        help="Provide details about the problem you're experiencing"
+    )
+    
+    if st.button("🚀 Analyze Issue", use_container_width=True):
+        if issue_description and issue_description != "Describe what's happening with your plant or equipment...":
+            user_message = f"**Plant:** {plant_name}\n\n**Issue:** {issue_description}"
+            
+            # Add user message to chat
+            st.session_state.messages.append({"role": "user", "content": user_message})
+            st.session_state.context_data = {"plant_name": plant_name, "type": "text"}
+            
+            # Get AI analysis
+            if build_client() is not None and types is not None:
+                with st.spinner("🤖 Analyzing issue..."):
+                    try:
+                        client = build_client()
+                        response = client.models.generate_content(
+                            model=GEMINI_MODEL,
+                            contents=user_message,
+                            config=types.GenerateContentConfig(system_instruction=load_system_prompt()),
+                        )
+                        analysis = getattr(response, "text", None) or str(response)
+                        
+                        # Add assistant response
+                        st.session_state.messages.append({"role": "assistant", "content": analysis})
+                        st.session_state.current_analysis = analysis
+                        
+                        # Display structured analysis
+                        st.markdown("---")
+                        structured = structure_analysis_output(analysis)
+                        format_structured_analysis(structured)
+                        
+                        # SAP BTP submission option
+                        st.markdown("---")
+                        st.subheader("📤 Submit to SAP BTP")
+                        
+                        summary = extract_summary_from_analysis(analysis)
+                        st.session_state.current_summary = summary
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            plant_id = st.text_input("Plant ID", value=summary.get('plant', '1000'), key=f"plant_{len(st.session_state.messages)}")
+                            summary['plant'] = plant_id
+                        
+                        with col2:
+                            issue_id = st.text_input("Issue ID (optional for update)", value="", key=f"issue_{len(st.session_state.messages)}")
+                        
+                        if st.button("Send to SAP BTP", use_container_width=True):
+                            plant_doc_data = {
+                                "Plant": plant_id,
+                                "rootcause": summary['rootcause'],
+                                "solution": summary['solution'],
+                                "status": summary['status'],
+                            }
+                            
+                            with st.spinner("📡 Sending to SAP BTP..."):
+                                success, message = send_to_sap_btp(plant_doc_data, issue_id if issue_id.strip() else None)
+                            
+                            if success:
+                                st.success(message)
+                            else:
+                                st.error(message)
+                        
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Analysis failed: {str(e)}")
+            else:
+                st.warning("⚠️ Vertex AI not configured. Set VERTEX_PROJECT_ID and VERTEX_LOCATION.")
         else:
-            answer = (
-                "⚠️ Vertex AI is not configured for this local run. "
-                "Set VERTEX_PROJECT_ID and VERTEX_LOCATION to enable live analysis. "
-                "For Cloud Run, the deployment workflow injects those values automatically."
-            )
+            st.warning("Please provide a description of the issue.")
 
-        st.markdown("---")
-        st.markdown("## 🔍 Analysis Results")
-        
-        # Structure the analysis for better readability
-        structured = structure_analysis_output(answer)
-        format_structured_analysis(structured)
-        
-        # Show full analysis in expander
-        with st.expander("📖 Full Analysis Report"):
-            st.markdown(answer)
-
-    else:
-        st.info(
-            "💡 Enter a plant issue and click Analyze to get a diagnostic recommendation. "
-            "This service is intended to run behind Cloud Run with Google Vertex AI enabled."
-        )
-
-# ============================================================================
-# TAB 2: File Upload Mode
-# ============================================================================
-with tab2:
-    st.subheader("Analyze Offline AI Reports & Logs")
-    
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.write(
-            "📦 **Upload a ZIP file** containing:\n"
-            "- JSON analysis reports (from Ollama, TensorFlow, or other offline AI)\n"
-            "- Log files (.log, .txt)\n\n"
-            "The system will analyze the reports and logs to diagnose issues and provide resolution steps."
-        )
-    
+# ZIP file upload mode
+elif input_method == "📁 Upload ZIP File":
     uploaded_zip = st.file_uploader(
-        "Choose a ZIP file",
+        "Upload ZIP file with reports and logs",
         type=["zip"],
-        help="Upload a ZIP file containing analysis reports (JSON) and log files",
+        help="ZIP containing JSON reports and log files"
     )
     
     if uploaded_zip is not None:
-        st.success(f"✅ ZIP file loaded: {uploaded_zip.name}")
+        st.success(f"✅ Loaded: {uploaded_zip.name}")
         
-        # Extract contents
-        with st.spinner("📂 Extracting files from ZIP..."):
+        with st.spinner("📂 Extracting files..."):
             zip_contents = extract_zip_contents(uploaded_zip)
+            st.session_state.zip_contents = zip_contents
         
-        # Display extracted files summary
-        st.subheader("📊 Extracted Contents")
+        # Show file summary
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("📄 JSON Files", len(zip_contents["json_files"]))
@@ -387,140 +570,125 @@ with tab2:
         with col3:
             st.metric("📁 Other Files", len(zip_contents["other_files"]))
         
-        # Show file preview
-        with st.expander("📋 Preview Extracted Files"):
-            if zip_contents["json_files"]:
-                st.write("**JSON Files:**")
-                for filename in zip_contents["json_files"].keys():
-                    st.code(filename, language="text")
-            
-            if zip_contents["log_files"]:
-                st.write("**Log Files:**")
-                for filename in zip_contents["log_files"].keys():
-                    st.code(filename, language="text")
-        
-        # User prompt for analysis
-        st.subheader("🎯 Analysis Request")
-        user_prompt = st.text_area(
-            "Describe what issue you're investigating:",
-            value="Analyze the provided reports and logs to identify the root cause and provide reproduction steps.",
-            height=120,
-            help="Provide context about what you're investigating or what errors you're seeing",
+        # Analysis prompt
+        analysis_prompt = st.text_area(
+            "What would you like me to analyze?",
+            value="Analyze these reports and logs to identify the root cause and provide resolution steps.",
+            height=80
         )
         
-        if st.button("🚀 Send to Gemini for Analysis", use_container_width=True):
-            if build_client() is not None and types is not None:
-                with st.spinner("🤖 Analyzing with Gemini..."):
-                    # Format content for Gemini
-                    analysis_content = format_analysis_content(zip_contents, user_prompt)
-                    
-                    client = build_client()
-                    try:
-                        response = client.models.generate_content(
-                            model=GEMINI_MODEL,
-                            contents=analysis_content,
-                            config=types.GenerateContentConfig(system_instruction=prompt),
-                        )
-                    except Exception as exc:
-                        st.error(f"Vertex AI request failed: {exc}")
-                        if "SERVICE_DISABLED" in str(exc) or "aiplatform.googleapis.com" in str(exc):
-                            st.info(
-                                "Enable the Vertex AI API for this project, then retry:\n\n"
-                                "`gcloud services enable aiplatform.googleapis.com --project="
-                                f"{os.getenv('VERTEX_PROJECT_ID') or os.getenv('GOOGLE_CLOUD_PROJECT', '<project-id>')}`"
+        if st.button("🚀 Analyze ZIP Contents", use_container_width=True):
+            if zip_contents["json_files"] or zip_contents["log_files"]:
+                user_message = f"**ZIP Analysis Request:** {analysis_prompt}"
+                
+                st.session_state.messages.append({"role": "user", "content": user_message})
+                st.session_state.context_data = {"zip_name": uploaded_zip.name, "type": "zip"}
+                
+                if build_client() is not None and types is not None:
+                    with st.spinner("🤖 Analyzing with Gemini..."):
+                        try:
+                            analysis_content = format_analysis_content(zip_contents, analysis_prompt)
+                            
+                            client = build_client()
+                            response = client.models.generate_content(
+                                model=GEMINI_MODEL,
+                                contents=analysis_content,
+                                config=types.GenerateContentConfig(system_instruction=load_system_prompt()),
                             )
-                        st.stop()
-                    analysis_result = getattr(response, "text", None) or str(response)
-                
-                # Display results
-                st.markdown("---")
-                st.markdown("## 🔍 Analysis Results")
-                
-                # Structure the analysis for better readability
-                structured = structure_analysis_output(analysis_result)
-                format_structured_analysis(structured)
-                
-                # Show full analysis in expander
-                with st.expander("📖 Full Analysis Report"):
-                    st.markdown(analysis_result)
-                
-                # Extract and display summary
-                st.markdown("---")
-                st.markdown("### 📋 Analysis Summary for SAP BTP")
-                
-                summary = extract_summary_from_analysis(analysis_result)
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.info(f"**Root Cause:**\n{summary['rootcause'] or 'Not extracted'}")
-                with col2:
-                    st.success(f"**Status:**\n{summary['status']}")
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.warning(f"**Solution:**\n{summary['solution'] or 'Not extracted'}")
-                with col2:
-                    plant_input = st.text_input("Plant ID", value=summary.get('plant', '1000'), key="plant_input")
-                    summary['plant'] = plant_input
-                
-                # SAP BTP Integration
-                st.markdown("---")
-                st.markdown("### 🚀 Submit to SAP BTP")
-                
-                # Issue ID input for updates
-                col1, col2 = st.columns([2, 1])
-                with col1:
-                    issue_id_input = st.text_input(
-                        "Issue ID (optional - leave empty to create new, or paste existing ID to update)",
-                        value="",
-                        placeholder="e.g., 550e8400-e29b-41d4-a716-446655440000",
-                        help="If you have an existing Issue ID from a previous submission, paste it here to update that issue instead of creating a new one."
-                    )
-                with col2:
-                    if issue_id_input.strip():
-                        st.info("🔄 **Update Mode**\nWill update existing issue")
-                    else:
-                        st.info("✨ **Create Mode**\nWill create new issue")
-                
-                # Send to SAP BTP Button
-                col1, col2, col3 = st.columns([2, 1, 1])
-                
-                with col1:
-                    st.info("Send this analysis to SAP BTP for workflow processing and tracking.")
-                
-                with col2:
-                    if st.button("📤 Send to SAP BTP", use_container_width=True):
-                        # Prepare data for SAP BTP
-                        plant_doc_data = {
-                            "Plant": summary.get('plant', '1000'),
-                            "rootcause": summary['rootcause'],
-                            "solution": summary['solution'],
-                            "status": summary['status'],
-                        }
-                        
-                        with st.spinner("📡 Sending to SAP BTP..."):
-                            success, message = send_to_sap_btp(plant_doc_data, issue_id_input.strip() if issue_id_input else None)
-                        
-                        if success:
-                            st.success(message)
-                            # Copy issue ID to clipboard info
-                            if not issue_id_input.strip():
-                                st.info("💡 **Tip:** Copy the Issue ID shown above and paste it here next time to update this issue.")
-                        else:
-                            st.error(message)
-                
-                with col3:
-                    st.button("⚙️ Settings", key="settings_btn", help="Configure SAP BTP connection")
-                
-                # Option to copy results
-                st.download_button(
-                    label="📥 Download Analysis as Text",
-                    data=analysis_result,
-                    file_name="plantdoctor_analysis.txt",
-                    mime="text/plain",
-                )
+                            analysis = getattr(response, "text", None) or str(response)
+                            
+                            st.session_state.messages.append({"role": "assistant", "content": analysis})
+                            st.session_state.current_analysis = analysis
+                            
+                            st.markdown("---")
+                            structured = structure_analysis_output(analysis)
+                            format_structured_analysis(structured)
+                            
+                            # SAP BTP submission
+                            st.markdown("---")
+                            st.subheader("📤 Submit to SAP BTP")
+                            
+                            summary = extract_summary_from_analysis(analysis)
+                            st.session_state.current_summary = summary
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                plant_id = st.text_input("Plant ID", value=summary.get('plant', '1000'), key=f"plant_{len(st.session_state.messages)}")
+                                summary['plant'] = plant_id
+                            
+                            with col2:
+                                issue_id = st.text_input("Issue ID (optional for update)", value="", key=f"issue_{len(st.session_state.messages)}")
+                            
+                            if st.button("Send to SAP BTP", use_container_width=True):
+                                plant_doc_data = {
+                                    "Plant": plant_id,
+                                    "rootcause": summary['rootcause'],
+                                    "solution": summary['solution'],
+                                    "status": summary['status'],
+                                }
+                                
+                                with st.spinner("📡 Sending to SAP BTP..."):
+                                    success, message = send_to_sap_btp(plant_doc_data, issue_id if issue_id.strip() else None)
+                                
+                                if success:
+                                    st.success(message)
+                                else:
+                                    st.error(message)
+                            
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Analysis failed: {str(e)}")
+                else:
+                    st.warning("⚠️ Vertex AI not configured.")
             else:
-                st.error(
-                    "⚠️ Vertex AI is not configured. "
-                    "Set VERTEX_PROJECT_ID and VERTEX_LOCATION environment variables."
-                )
+                st.warning("❌ No JSON or log files found in ZIP.")
+
+# Follow-up question mode
+elif input_method == "❓ Follow-up Question":
+    if st.session_state.messages:
+        follow_up = st.text_area(
+            "Ask a follow-up question about the previous analysis:",
+            height=80,
+            help="Ask for clarification, more details, or alternative solutions"
+        )
+        
+        if st.button("🔗 Ask Follow-up", use_container_width=True):
+            if follow_up:
+                st.session_state.messages.append({"role": "user", "content": follow_up})
+                
+                if st.session_state.current_analysis and build_client() is not None and types is not None:
+                    with st.spinner("🤖 Analyzing follow-up..."):
+                        try:
+                            context = f"Previous Analysis:\n{st.session_state.current_analysis}\n\nFollow-up Question:\n{follow_up}"
+                            
+                            client = build_client()
+                            response = client.models.generate_content(
+                                model=GEMINI_MODEL,
+                                contents=context,
+                                config=types.GenerateContentConfig(system_instruction=load_system_prompt()),
+                            )
+                            answer = getattr(response, "text", None) or str(response)
+                            
+                            st.session_state.messages.append({"role": "assistant", "content": answer})
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Follow-up failed: {str(e)}")
+                else:
+                    st.warning("No previous analysis found. Start with a text or ZIP analysis first.")
+            else:
+                st.warning("Please enter your follow-up question.")
+    else:
+        st.info("💡 Start with a text description or ZIP file upload to enable follow-up questions.")
+
+# ============================================================================
+# CLEAR CHAT HISTORY
+# ============================================================================
+st.markdown("---")
+if st.button("🔄 Clear Chat History", use_container_width=True):
+    st.session_state.messages = []
+    st.session_state.zip_contents = None
+    st.session_state.current_analysis = None
+    st.session_state.current_summary = None
+    st.session_state.context_data = {}
+    st.rerun()
+
