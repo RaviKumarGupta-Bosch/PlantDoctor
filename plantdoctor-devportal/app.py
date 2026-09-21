@@ -284,6 +284,90 @@ def send_to_sap_btp(plant_doc_data: dict, issue_id: str = None) -> tuple[bool, s
         return False, f"❌ Error: {str(e)}"
 
 
+def get_similar_issues_from_sap_btp(current_analysis: str = None, current_summary: dict = None) -> tuple[bool, list]:
+    """
+    Generate similar issues from SAP BTP using Gemini LLM based on current analysis.
+    Returns: (success: bool, similar_issues: list of dict)
+    """
+    if not current_analysis or not current_summary:
+        return False, []
+    
+    try:
+        if build_client() is None or types is None:
+            return False, []
+        
+        # Create prompt for Gemini to generate similar scenarios
+        llm_prompt = f"""Based on this plant issue analysis, generate 2-3 SIMILAR scenarios that other plants in SAP BTP might have faced.
+
+CURRENT ISSUE:
+Root Cause: {current_summary.get('rootcause', 'Unknown')}
+Solution: {current_summary.get('solution', 'Unknown')}
+Status: {current_summary.get('status', 'OPEN')}
+
+Full Analysis:
+{current_analysis[:500]}  (truncated for context)
+
+Generate similar issues in JSON format EXACTLY like this (2-3 issues only):
+[
+  {{
+    "IssueId": "ISS-2024-XXX",
+    "Plant": "Plant-XXXX",
+    "Problem": "Short problem description (1 line)",
+    "RootCause": "Short root cause (1 line)",
+    "Solution": "Short solution (1 line)",
+    "Status": "RESOLVED" or "IN_PROGRESS",
+    "Similarity": "90%"
+  }}
+]
+
+Requirements:
+- Each scenario should be similar but from DIFFERENT plants (Plant-2000, Plant-3000, Plant-4000, etc.)
+- All issues should have different Issue IDs
+- Keep descriptions SHORT (1-2 lines max each)
+- Vary the Status between RESOLVED and IN_PROGRESS
+- Similarity should be between 75-95%
+- Return ONLY valid JSON array, no extra text"""
+
+        client = build_client()
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=llm_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction="You are an expert in plant diagnostics. Generate realistic similar plant issues that could occur in different facilities. Return ONLY valid JSON arrays, no markdown, no explanations."
+            ),
+        )
+        
+        response_text = getattr(response, "text", None) or str(response)
+        
+        # Clean response (remove markdown code blocks if present)
+        response_text = response_text.strip()
+        if response_text.startswith("```"):
+            response_text = response_text.split("```")[1]
+            if response_text.startswith("json"):
+                response_text = response_text[4:]
+        response_text = response_text.strip()
+        
+        # Parse JSON response
+        similar_issues = json.loads(response_text)
+        
+        # Validate structure
+        if not isinstance(similar_issues, list):
+            return False, []
+        
+        # Ensure all required fields exist
+        validated_issues = []
+        for issue in similar_issues:
+            if all(key in issue for key in ["IssueId", "Plant", "Problem", "RootCause", "Solution", "Status", "Similarity"]):
+                validated_issues.append(issue)
+        
+        return len(validated_issues) > 0, validated_issues
+    
+    except json.JSONDecodeError:
+        return False, []
+    except Exception as e:
+        return False, []
+
+
 def factory_icon_data_uri() -> str:
     """Render the industrial plant icon as a base64 data URI (safer than raw inline SVG in markdown)."""
     svg = (
@@ -765,6 +849,69 @@ if st.session_state.current_summary:
             st.error(message)
 else:
     st.info("💡 Run a text or ZIP analysis first to enable sending the current issue status to SAP BTP.")
+
+# ============================================================================
+# GET SIMILAR ISSUES FROM OTHER PLANTS (SAP BTP)
+# ============================================================================
+st.markdown("---")
+st.subheader("🔍 Get Similar Issues from Other Plants", anchor=False)
+
+if st.session_state.current_summary:
+    st.caption("Retrieve similar resolved or in-progress issues from other plants in SAP BTP using AI analysis.")
+    if st.button("🌱 Find Similar Issues from SAP BTP", use_container_width=True):
+        with st.spinner("🔍 Searching SAP BTP for similar issues from other plants..."):
+            success, similar_issues = get_similar_issues_from_sap_btp(
+                current_analysis=st.session_state.current_analysis,
+                current_summary=st.session_state.current_summary
+            )
+        
+        if success and similar_issues:
+            st.success(f"✅ Found {len(similar_issues)} similar issues from other plants in SAP BTP!")
+            
+            # Display in table format with short info (3 lines per issue)
+            st.markdown("**Similar Issues Found:**")
+            
+            # Create table data
+            table_data = []
+            for issue in similar_issues:
+                table_data.append({
+                    "Issue ID": issue["IssueId"],
+                    "Plant": issue["Plant"],
+                    "Problem": issue["Problem"][:60] + "..." if len(issue["Problem"]) > 60 else issue["Problem"],
+                    "Solution": issue["Solution"][:60] + "..." if len(issue["Solution"]) > 60 else issue["Solution"],
+                    "Status": issue["Status"],
+                    "Similarity": issue["Similarity"]
+                })
+            
+            # Display table
+            st.dataframe(
+                table_data,
+                use_container_width=True,
+                height=200,
+                hide_index=True,
+                column_config={
+                    "Issue ID": st.column_config.TextColumn("Issue ID", width="small"),
+                    "Plant": st.column_config.TextColumn("Plant", width="small"),
+                    "Problem": st.column_config.TextColumn("Problem", width="medium"),
+                    "Solution": st.column_config.TextColumn("Solution", width="medium"),
+                    "Status": st.column_config.TextColumn("Status", width="small"),
+                    "Similarity": st.column_config.TextColumn("Similarity", width="small"),
+                }
+            )
+            
+            # Show detailed view option
+            with st.expander("📋 View Full Details"):
+                for i, issue in enumerate(similar_issues, 1):
+                    st.markdown(f"**Issue {i}: {issue['IssueId']}** (Plant: {issue['Plant']})")
+                    st.write(f"**Problem:** {issue['Problem']}")
+                    st.write(f"**Root Cause:** {issue['RootCause']}")
+                    st.write(f"**Solution:** {issue['Solution']}")
+                    st.write(f"**Status:** {issue['Status']} | **Similarity:** {issue['Similarity']}")
+                    st.divider()
+        else:
+            st.warning("⚠️ No similar issues found in SAP BTP at this time.")
+else:
+    st.info("💡 Run a text or ZIP analysis first to find similar issues from other plants.")
 
 # ============================================================================
 # CLEAR CHAT HISTORY
