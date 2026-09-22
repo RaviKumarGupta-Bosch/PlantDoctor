@@ -562,6 +562,43 @@ st.markdown("""
         border-radius: 10px;
         padding: 10px;
     }
+
+    /* Chat container - Scrollable */
+    .chat-container {
+        max-height: 600px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        border: 1px solid #D6E4F5;
+        border-radius: 12px;
+        padding: 16px;
+        background: #ffffff;
+        margin-bottom: 20px;
+    }
+
+    /* Smooth scrollbar styling */
+    .chat-container::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    .chat-container::-webkit-scrollbar-track {
+        background: #F7FAFE;
+        border-radius: 10px;
+    }
+
+    .chat-container::-webkit-scrollbar-thumb {
+        background: #0066CC;
+        border-radius: 10px;
+    }
+
+    .chat-container::-webkit-scrollbar-thumb:hover {
+        background: #003A7A;
+    }
+
+    /* Firefox scrollbar */
+    .chat-container {
+        scrollbar-color: #0066CC #F7FAFE;
+        scrollbar-width: thin;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -600,12 +637,13 @@ st.markdown(
 # MAIN UNIFIED CHAT INTERFACE
 # ============================================================================
 
-# Chat display area
+# Chat display area with scroll
 if st.session_state.messages:
-    with st.container(border=True):
-        for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+    st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ============================================================================
 # INPUT SECTION
