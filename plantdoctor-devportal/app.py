@@ -599,6 +599,42 @@ st.markdown("""
         scrollbar-color: #0066CC #F7FAFE;
         scrollbar-width: thin;
     }
+
+    /* Analysis results container - Scrollable */
+    .analysis-container {
+        max-height: 800px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        border: 1px solid #D6E4F5;
+        border-radius: 12px;
+        padding: 20px;
+        background: #ffffff;
+        margin-bottom: 20px;
+    }
+
+    /* Scrollbar for analysis container */
+    .analysis-container::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    .analysis-container::-webkit-scrollbar-track {
+        background: #F7FAFE;
+        border-radius: 10px;
+    }
+
+    .analysis-container::-webkit-scrollbar-thumb {
+        background: #0066CC;
+        border-radius: 10px;
+    }
+
+    .analysis-container::-webkit-scrollbar-thumb:hover {
+        background: #003A7A;
+    }
+
+    .analysis-container {
+        scrollbar-color: #0066CC #F7FAFE;
+        scrollbar-width: thin;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -697,10 +733,11 @@ if input_method == "📝 Text Description":
                         st.session_state.messages.append({"role": "assistant", "content": analysis})
                         st.session_state.current_analysis = analysis
                         
-                        # Display structured analysis
-                        with st.container(border=True):
-                            structured = structure_analysis_output(analysis)
-                            format_structured_analysis(structured)
+                        # Display structured analysis in scrollable container
+                        st.markdown('<div class="analysis-container">', unsafe_allow_html=True)
+                        structured = structure_analysis_output(analysis)
+                        format_structured_analysis(structured)
+                        st.markdown('</div>', unsafe_allow_html=True)
 
                         # SAP BTP submission option
                         st.subheader("📤 Submit to SAP BTP", anchor=False)
@@ -794,9 +831,11 @@ elif input_method == "📁 Upload ZIP File":
                             st.session_state.messages.append({"role": "assistant", "content": analysis})
                             st.session_state.current_analysis = analysis
                             
-                            with st.container(border=True):
-                                structured = structure_analysis_output(analysis)
-                                format_structured_analysis(structured)
+                            # Display structured analysis in scrollable container
+                            st.markdown('<div class="analysis-container">', unsafe_allow_html=True)
+                            structured = structure_analysis_output(analysis)
+                            format_structured_analysis(structured)
+                            st.markdown('</div>', unsafe_allow_html=True)
 
                             # SAP BTP submission
                             st.subheader("📤 Submit to SAP BTP", anchor=False)
