@@ -35,9 +35,6 @@ on:
           - 'service-only'
           - 'service-and-images'
           - 'full'
-  schedule:
-    # Run cleanup every Sunday at 2 AM UTC (optional, comment out if not needed)
-    # - cron: '0 2 * * 0'
 
 permissions:
   contents: read
